@@ -4,6 +4,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
+ADD application-source.tar /app/
 RUN npm run build
 
 FROM node:24-bookworm-slim AS runner
