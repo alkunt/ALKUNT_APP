@@ -1,6 +1,8 @@
 # Supabase registration rollout
 
-The deployable source was extracted from `application-source.tar` into versioned `app`, `server`, `public`, `scripts`, and `tests` directories. Docker now builds these files directly. The historical archive is no longer used, so it cannot overwrite a newer authentication implementation during deployment.
+The production GitHub repository currently deploys `application-source.tar`: its Dockerfile extracts the archive before building. The local development checkout contains the extracted `app`, `server`, `public`, `scripts`, and `tests` directories. Regenerate the archive from the reviewed source for each browser upload and upload matching package.json and package-lock.json. Never put environment secrets or customer data in the archive.
+
+Railway Free/Trial/Hobby blocks outbound SMTP. Configure `BREVO_API_KEY` and a verified `MAIL_FROM` there to send legacy/owner password recovery over HTTPS. Supabase uses the separately configured Brevo SMTP key for its own authentication emails. A successful Supabase email does not prove Railway delivery; test both paths.
 
 ## Required configuration
 
