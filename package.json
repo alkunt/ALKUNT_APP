@@ -9,7 +9,7 @@
   "scripts": {
     "build": "next build --webpack",
     "start": "next start",
-    "test": "node tests/platform.test.cjs && node tests/push.test.cjs && node tests/selfhost.test.mjs && node tests/password-reset.test.mjs && node tests/content-store.test.mjs",
+    "test": "node tests/platform.test.cjs && node tests/push.test.cjs && node tests/selfhost.test.mjs && node tests/supabase-auth.test.mjs && node tests/account-recovery.test.mjs",
     "owner": "node scripts/create-owner.mjs",
     "backup": "node scripts/backup.mjs",
     "export:users": "node scripts/export-registrants.mjs",
@@ -19,17 +19,18 @@
     "typecheck": "tsc --noEmit --incremental false"
   },
   "dependencies": {
+    "lucide-react": "1.31.0",
     "next": "16.3.4",
+    "nodemailer": "10.1.7",
     "react": "19.2.6",
-    "react-dom": "19.2.6",
-    "lucide-react": "1.31.0"
+    "react-dom": "19.2.6"
   },
   "devDependencies": {
-    "typescript": "5.9.3",
+    "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@tailwindcss/postcss": "4.2.1",
-    "tailwindcss": "4.2.1"
+    "tailwindcss": "4.2.1",
+    "typescript": "5.9.3"
   }
 }
