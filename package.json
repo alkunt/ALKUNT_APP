@@ -9,7 +9,7 @@
   "scripts": {
     "build": "next build --webpack",
     "start": "next start",
-    "test": "node tests/platform.test.cjs && node tests/push.test.cjs && node tests/selfhost.test.mjs && node tests/supabase-auth.test.mjs && node tests/account-recovery.test.mjs",
+    "test": "node tests/platform.test.cjs && node tests/push.test.cjs && node tests/selfhost.test.mjs && node tests/supabase-auth.test.mjs && node tests/account-recovery.test.mjs && node tests/marketing.test.mjs",
     "owner": "node scripts/create-owner.mjs",
     "backup": "node scripts/backup.mjs",
     "export:users": "node scripts/export-registrants.mjs",
