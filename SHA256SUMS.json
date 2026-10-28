@@ -38,7 +38,7 @@
   "app/email-marketing.tsx": "d68dc142438df90ee9de8eabf7ed489d1e5585b2669cf1422ecbe4c64ad7450b",
   "app/email-preferences.tsx": "a245aa5ded8fc4f3f59cfa8e7c9bda3a54fc20b3e4741decaa53357607670c26",
   "app/globals.css": "dc48f13955a9bbc226e358fbadb6957131ce9d220fe7948ae1b48038e7e4d2d4",
-  "app/gumroad-checkout.tsx": "3fbd09bd10e98a50cbbb04fe720fee1549e6a868b0228105920ea28c54923e8a",
+  "app/gumroad-checkout.tsx": "1a15b11f87dd4f0549ff904c3d681d67aa32ee7e456136c02ca8e3f25dcc6f13",
   "app/layout.tsx": "4d500b15ba28eae119ea9a3b4cd50cc79ba45d1c536346ca393e455545aed32b",
   "app/link-rules.ts": "a93d5eb2414043df37af6054debc6bfdf9cfed51edbd7544d4563b81ed01f937",
   "app/marketing-audience.mjs": "ffe972dd79af8baa06cc9fb206d38ba0fc6efd8f4e6c00509ca20f7581228f7e",
@@ -93,7 +93,7 @@
   "scripts/preflight.mjs": "e73bc9f3954c345707fd33d7446b683b587316edb56cb5734ae2f7d06ad6ab9f",
   "server/auth.mjs": "0a62ad745a092827338a0b7e70aee53932aabf51e9e304341de77a80d1b88fe8",
   "server/content-store.mjs": "ed24822d1e4d8c6157f75fb5746c6c8f22c326428703769707d8d9357076c566",
-  "server/gumroad.mjs": "529d7d0f6142a6646a6618a238c6a7fdb04f7893d1e263f607198188a25dd8eb",
+  "server/gumroad.mjs": "4fdd1ec7612352f560b80f671c31fb6aa68fbe5c267f179cb28471eb3d7f9ecd",
   "server/mail.mjs": "150b74b63a421d504b2ed80f41857c4a34e7cebd79c9c669044b8c82f01f2588",
   "server/marketing-http.mjs": "c57f3b4ae9f469b64fd4877b96379d14633dab2e36af37e5c12fca515ad627c3",
   "server/marketing-media.mjs": "c1e1638fcb4cfe267c69a96100b27c433284ba2d7dd170499d45948ecd952678",
@@ -105,7 +105,7 @@
   "server/supabase-auth.mjs": "a5d91bff4e396a032e7ac48bdfd4c0f616bfae810f4471e5bc9e35d8ad2ce68e",
   "tests/account-recovery.test.mjs": "c66b9599628aa9abe8e7713e5f8737a7682a79135700025b3c90e52935031c44",
   "tests/content-store.test.mjs": "659ff43d5a1e7ff14daee38659fc2c4a505ffa5658828d5debae0170a7ec5e03",
-  "tests/gumroad.test.mjs": "c52e1c7645a37933a54627807b77a89208cc621e7a8a76b7e494d28e742eb4cb",
+  "tests/gumroad.test.mjs": "ed3b68a3d220edd841340d2fd6c65688dc396c272c4496d111dc65f3803441d7",
   "tests/http.test.mjs": "5434d49db83b8478997a8d99bbe108021028006e4ad218886260398cf5cb2cf7",
   "tests/marketing.test.mjs": "a10b21ec291b32d50f9ef2e7d1ee093601b5570e5d8da2727c404671c2e8d749",
   "tests/password-reset.test.mjs": "81c1b6a884ecb8c476f5c04c15aa3188eb8f92707a8ce730e66a822e501b8d52",
@@ -118,5 +118,5 @@
   "app/order-delete-dialog.tsx": "e000213e526abe116032d92b05b59282325c77f27c4f515c764e2cb24e65f0af",
   "app/api/orders/permanent-delete/route.ts": "52754104dbea4d43b5ff7180877c7053025dbf489de3a507bf6ed651250678e1",
   "tests/order-deletion.test.mjs": "9d7eb016f13f7dee01e78b03f4305ca01634d4dabdfe102cbf4bdfa861f5bd65",
-  "application-source.tar": "533aa55c36313c6dfaa7b530db2d3b2c77f2f322a11a2a0241901c5d595c3cb0"
+  "application-source.tar": "900ad64b3d2cd87de9d21dae2051d82b31d2213d489b1d5b648eb99202ff91ce"
 }
