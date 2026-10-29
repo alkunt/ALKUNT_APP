@@ -118,9 +118,9 @@
   "app/order-delete-dialog.tsx": "e000213e526abe116032d92b05b59282325c77f27c4f515c764e2cb24e65f0af",
   "app/api/orders/permanent-delete/route.ts": "52754104dbea4d43b5ff7180877c7053025dbf489de3a507bf6ed651250678e1",
   "tests/order-deletion.test.mjs": "9d7eb016f13f7dee01e78b03f4305ca01634d4dabdfe102cbf4bdfa861f5bd65",
-  "application-source.tar": "e6664dfed4930caac92294e554dbea55d79ae1d267581269241fffc1925c239f",
+  "application-source.tar": "c9fbc0f93c3b3d2db19f5cfc0a2689720affcf8fd0c1da95711e0f1c638c1070",
   "app/api/payments/gumroad/delivery/route.ts": "52f553ec7e6afcd53c72e779a8900d3560d3aa738da841305d5e999317204fa4",
-  "app/gumroad-delivery-status.tsx": "6fa18cfcd1dd27ac07f36bb287f78d99bc65d283c717246a607a3e358e2a80f1",
+  "app/gumroad-delivery-status.tsx": "5cec0599d34b026f33ccb9452632dc780b988a38726ef61a8040dc41a4cc51fb",
   "server/gumroad-delivery.mjs": "12494ffd7479eee18767a98dd5c0016f55ceedf6a0a50104138c7577ad274a1a",
   "tests/gumroad-delivery.test.mjs": "c13821c157d6aff4839f23d9c20633466d99b408693709a8249b82348499c827",
   "GUMROAD_AUTO_DELIVERY_AR.md": "0cdea3103e23cdbbd8469c7dae3fbdd6bfac5d4789a295bd1b4a43df2370affc"
