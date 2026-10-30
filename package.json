@@ -9,14 +9,15 @@
   "scripts": {
     "build": "next build --webpack",
     "start": "next start",
-    "test": "node tests/platform.test.cjs && node tests/push.test.cjs && node tests/selfhost.test.mjs && node tests/supabase-auth.test.mjs && node tests/account-recovery.test.mjs && node tests/marketing.test.mjs && node tests/rich-media.test.mjs && node tests/gumroad.test.mjs && node tests/gumroad-delivery.test.mjs && node tests/order-deletion.test.mjs",
+    "test": "node tests/platform.test.cjs && node tests/push.test.cjs && node tests/selfhost.test.mjs && node tests/supabase-auth.test.mjs && node tests/account-recovery.test.mjs && node tests/marketing.test.mjs && node tests/rich-media.test.mjs && node tests/gumroad.test.mjs && node tests/gumroad-delivery.test.mjs && node tests/order-deletion.test.mjs && node tests/site-audit.test.mjs",
     "owner": "node scripts/create-owner.mjs",
     "backup": "node scripts/backup.mjs",
     "export:users": "node scripts/export-registrants.mjs",
     "test:http": "node tests/http.test.mjs",
     "preflight": "node scripts/preflight.mjs",
     "export:content": "node scripts/export-content.mjs",
-    "typecheck": "tsc --noEmit --incremental false"
+    "typecheck": "tsc --noEmit --incremental false",
+    "test:site": "node tests/site-audit.test.mjs"
   },
   "dependencies": {
     "@tiptap/extension-text-align": "3.32.0",
