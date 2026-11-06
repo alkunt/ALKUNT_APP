@@ -52,7 +52,7 @@
   "app/owner-notifications.ts": "39a0aa0a181f46a78143f789a69469e599c958f844cd6186c1bfaaac69fa5a82",
   "app/page.tsx": "4049136af891080a741c3b1922a6e649512d967c612cf8d66681c6c4f781c784",
   "app/platform-data.ts": "e2c73b70f05a24cc3f4cdd221c31d7789cb69453a267f6c8da1fe80ebc44d291",
-  "app/platform.tsx": "bacd3adfc88f6afb071dc169b3000a7d9ab503c43a7e0349b0417055bb9a8b0b",
+  "app/platform.tsx": "8b8d35aa87581926c705b2710345003d54d11d1bf4632e3b78330346e9df0d85",
   "app/preview-notice.tsx": "b0e6b6bb739882f5adfbd6c5dc3ff1a725c1f96abe34918c367ae03900db1998",
   "app/rich-text-content.tsx": "cba4f6ecc14dad17b27c31ec60c969575a93d4715cd230deb1fb7132c78072e8",
   "app/rich-text-editor.tsx": "c529e4705ef2cfbc07819c5809500d667993e05ba38310daccaf373e0f2de8bd",
@@ -118,7 +118,7 @@
   "app/order-delete-dialog.tsx": "e000213e526abe116032d92b05b59282325c77f27c4f515c764e2cb24e65f0af",
   "app/api/orders/permanent-delete/route.ts": "52754104dbea4d43b5ff7180877c7053025dbf489de3a507bf6ed651250678e1",
   "tests/order-deletion.test.mjs": "9d7eb016f13f7dee01e78b03f4305ca01634d4dabdfe102cbf4bdfa861f5bd65",
-  "application-source.tar": "1de6d147eabad52f6373aac85eba96ff8e84589ad5f9d05ccf0a04845330d8c7",
+  "application-source.tar": "7eb28b2f9df9d84e6a85073ee18365452ccc3b8d606f4b66954c6888c97fb606",
   "app/api/payments/gumroad/delivery/route.ts": "52f553ec7e6afcd53c72e779a8900d3560d3aa738da841305d5e999317204fa4",
   "app/gumroad-delivery-status.tsx": "96f7236f31480599f95608f2f3f8099563fcd0dda692a0b273857e7a53785a8d",
   "server/gumroad-delivery.mjs": "d36331f8d7da64fd20230fd9b071d4e596df5720d812864435507d9b3e2b6702",
@@ -143,6 +143,8 @@
   "tests/guest-notifications.test.mjs": "ef94562dc0af4e5d1c49a14aaca0c9b2f697aa2e58db7a69868daf0e8f416519",
   "tests/notifications.test.cjs": "07c7b2fa8019b1381fd2bd5751925fb7a17c4486eb778d7d01c52d6d2a8679d0",
   "app/theme-toggle.tsx": "d78ffd68640dd64d00d562840f6cb285077e39452f7642e42072cdebf0e4bec2",
-  "app/theme.css": "6ae1ba994a608b67c409880721bffcdc42a5b85eb43d705ae9e1dacf079c95b8",
-  "app/theme.ts": "b42edca665a952dced7aef287921255da27b53f99a173e6535c1eca671f0cccd"
+  "app/theme.css": "20af06594c75a0538e3785a53e90eefd3893b743e59e45de782a10db675d8811",
+  "app/theme.ts": "b42edca665a952dced7aef287921255da27b53f99a173e6535c1eca671f0cccd",
+  "app/brand-logo.tsx": "62c6de1da326a5698f7061b3ed5bbe14bf9d32574520c3309ba1a192874fa91f",
+  "public/alkunt-logo-dark.png": "908c4671c1e152aa50b448e2870b89c88e98804d164f95cece9d121c7faa4e0b"
 }
