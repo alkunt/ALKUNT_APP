@@ -1,0 +1,306 @@
+diff --git a/app/api/content-cover/route.ts b/app/api/content-cover/route.ts
+new file mode 100644
+index 0000000..a589828
+--- /dev/null
++++ b/app/api/content-cover/route.ts
+@@ -0,0 +1,19 @@
++import type {NextRequest} from 'next/server';
++import {publicProductMetadata} from '../../../server/public-metadata.mjs';
++import {generatedContentCover} from '../../../server/content-cover-image';
++
++export const dynamic='force-dynamic';
++export const runtime='nodejs';
++
++export async function GET(request:NextRequest) {
++  const item=request.nextUrl.searchParams.get('item');
++  const product=publicProductMetadata(item);
++  // Check visibility before consulting the image cache, including after unpublishing.
++  if (!product) return new Response('Cover unavailable',{status:404,headers:{'Cache-Control':'no-store'}});
++  const language=request.nextUrl.searchParams.get('lang')==='en'?'en':'ar';
++  try {
++    return new Response(await generatedContentCover(product,language),{headers:{'Content-Type':'image/png','Cache-Control':'public, max-age=60','X-Content-Type-Options':'nosniff'}});
++  } catch {
++    return new Response('Cover unavailable',{status:503,headers:{'Cache-Control':'no-store'}});
++  }
++}
+diff --git a/app/content-cover.mjs b/app/content-cover.mjs
+new file mode 100644
+index 0000000..8520e75
+--- /dev/null
++++ b/app/content-cover.mjs
+@@ -0,0 +1,31 @@
++import {localizedText} from './localized-text.mjs';
++
++// Cache identities contain only public catalog presentation, never article bodies or files.
++export function contentCoverVersion(product, language = 'ar') {
++  const value = JSON.stringify([product.id,product.type,localizedText(product,language),
++    localizedText(product,language,'category'),product.cover || '',product.theme || 'blue']);
++  let hash = 2166136261;
++  for (let i=0;i<value.length;i++) hash = Math.imul(hash ^ value.charCodeAt(i),16777619);
++  return 'cover2-' + (hash >>> 0).toString(36);
++}
++
++export function uploadedContentCover(product, origin) {
++  if (!product.cover) return null;
++  try {
++    const image = new URL(String(product.cover),origin);
++    if (image.username || image.password ||
++        !(image.protocol==='https:' || image.protocol==='http:' && image.origin===origin)) return null;
++    if (image.origin===origin && /^\/(?:alkunt-logo(?:-dark)?|icon-192|icon-512)\.png$/i.test(image.pathname)) return null;
++    return image.href;
++  } catch { return null; }
++}
++
++export function contentCoverUrl(product, language, origin) {
++  const uploaded = uploadedContentCover(product,origin);
++  if (uploaded) return uploaded;
++  const image = new URL('/api/content-cover',origin);
++  image.searchParams.set('item',product.id);
++  if (language==='en') image.searchParams.set('lang','en');
++  image.searchParams.set('v',contentCoverVersion(product,language));
++  return image.href;
++}
+diff --git a/app/content-share.mjs b/app/content-share.mjs
+index f5ed488..4376dbf 100644
+--- a/app/content-share.mjs
++++ b/app/content-share.mjs
+@@ -1,23 +1,22 @@
+ import {siteOrigin} from './page-metadata.mjs';
+ import {localizedText} from './localized-text.mjs';
++import {contentCoverUrl,contentCoverVersion} from './content-cover.mjs';
+ 
+-export function contentShareUrl(product, origin) {
++export function contentShareUrl(product, origin, language = 'ar') {
+   const url = new URL('/', siteOrigin(origin));
+   url.searchParams.set('view', product.type === 'offer' ? 'offers' : product.type);
+   url.searchParams.set('item', product.id);
++  if (language==='en') url.searchParams.set('lang','en');
++  // A stable presentation version gives previously cached logo previews a fresh URL.
++  url.searchParams.set('share',contentCoverVersion(product,language));
+   return url.href;
+ }
+ 
+ export function contentShareData(product, language, origin) {
+   const site = siteOrigin(origin);
+-  let image = new URL('/alkunt-logo.png', site).href;
+-  try {
+-    const cover = new URL(product.cover || image, site);
+-    if (!cover.username && !cover.password &&
+-        (cover.protocol === 'https:' || cover.protocol === 'http:' && cover.origin === site)) image = cover.href;
+-  } catch { /* Use the same public brand image as the page metadata. */ }
++  const image = contentCoverUrl(product,language,site);
+   const title = localizedText(product, language) || 'ALKUNT';
+-  const url = contentShareUrl(product, site);
++  const url = contentShareUrl(product, site, language);
+   return {title, url, image, text: title + '\n' + url, language: language === 'en' ? 'en' : 'ar'};
+ }
+ 
+diff --git a/app/document-metadata.tsx b/app/document-metadata.tsx
+index 18522cd..b3685ed 100644
+--- a/app/document-metadata.tsx
++++ b/app/document-metadata.tsx
+@@ -5,7 +5,7 @@ import {buildPageMetadata} from './page-metadata.mjs';
+ export default function DocumentMetadata({view, item, product, language, origin, loading}:any) {
+   useEffect(() => {
+     if (loading) return;
+-    const metadata = buildPageMetadata({view, item, lang: language}, product, {origin});
++    const metadata = buildPageMetadata({view, item, lang: language, share: new URLSearchParams(location.search).get('share')}, product, {origin});
+     document.title = metadata.title;
+     const meta = (attribute:string, key:string, content:string) => {
+       const nodes = Array.from(document.querySelectorAll<HTMLMetaElement>(`meta[${attribute}="${key}"]`));
+@@ -24,7 +24,7 @@ export default function DocumentMetadata({view, item, product, language, origin,
+     meta('name', 'description', metadata.description);
+     meta('name', 'robots', metadata.robots.index ? 'index, follow' : 'noindex, nofollow');
+     for (const [name, value] of Object.entries({title: metadata.title, description: metadata.description,
+-      url: metadata.alternates.canonical, type: metadata.openGraph.type, locale: metadata.openGraph.locale,
++      url: metadata.openGraph.url, type: metadata.openGraph.type, locale: metadata.openGraph.locale,
+       image: metadata.openGraph.images[0].url, 'image:alt': metadata.openGraph.images[0].alt})) {
+       meta('property', 'og:' + name, value);
+     }
+diff --git a/app/page-metadata.mjs b/app/page-metadata.mjs
+index 93da749..3330e5a 100644
+--- a/app/page-metadata.mjs
++++ b/app/page-metadata.mjs
+@@ -1,4 +1,5 @@
+ import {localizedText} from './localized-text.mjs';
++import {contentCoverUrl,contentCoverVersion} from './content-cover.mjs';
+ 
+ export const DEFAULT_SITE_ORIGIN = 'https://alkunt-app-production.up.railway.app';
+ export const SITE_TITLE = 'ALKUNT | تعلّم الذكاء الاصطناعي وطبّقه بذكاء';
+@@ -34,15 +35,6 @@ function plainDescription(value) {
+   return String(value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
+ }
+ 
+-function publicImage(cover, origin) {
+-  try {
+-    const url = new URL(String(cover || '/alkunt-logo.png'), origin);
+-    if (url.username || url.password || !['https:', 'http:'].includes(url.protocol)) throw Error('Invalid image');
+-    if (url.protocol === 'http:' && url.origin !== origin) throw Error('Insecure external image');
+-    return url.href;
+-  } catch { return origin + '/alkunt-logo.png'; }
+-}
+-
+ export function buildPageMetadata(params = {}, product = null, options = {}) {
+   const first = value => Array.isArray(value) ? value[0] : value;
+   const view = first(params.view) || 'home';
+@@ -66,11 +58,16 @@ export function buildPageMetadata(params = {}, product = null, options = {}) {
+   const description = publicProduct ? plainDescription(localizedText(product, language, 'desc')) || title
+     : view === 'home' ? (english ? 'Practical courses, booklets and prompts to learn and apply AI.' : SITE_DESCRIPTION)
+     : title;
+-  const image = publicImage(publicProduct ? product.cover : '', origin);
++  const image = publicProduct ? contentCoverUrl(product,language,origin) : origin + '/alkunt-logo.png';
++  const graphUrl = new URL(canonical);
++  if (publicProduct && first(params.share)===contentCoverVersion(product,language)) {
++    if (english) graphUrl.searchParams.set('lang','en');
++    graphUrl.searchParams.set('share',contentCoverVersion(product,language));
++  }
+   return {
+     title, description, alternates: {canonical: canonical.href}, robots: {index, follow: index},
+     openGraph: {type: publicProduct && product.type === 'blog' ? 'article' : 'website',
+-      title, description, url: canonical.href, siteName: 'ALKUNT', locale: english ? 'en_US' : 'ar_KW',
++      title, description, url: graphUrl.href, siteName: 'ALKUNT', locale: english ? 'en_US' : 'ar_KW',
+       images: [{url: image, alt: publicProduct ? localizedText(product, language) : 'ALKUNT — الكونت'}]},
+     twitter: {card: 'summary_large_image', title, description, images: [image]}
+   };
+diff --git a/app/platform.tsx b/app/platform.tsx
+index 002db85..ce14b3e 100644
+--- a/app/platform.tsx
++++ b/app/platform.tsx
+@@ -4,7 +4,9 @@ import Coupons from './coupons';
+ import {resolvedFaqs,sitePageText} from './site-copy.mjs';
+ import {localizedText} from './localized-text.mjs';
+ import {catalogCategories,catalogItems,isCatalogView,matchesCatalogCategory} from './catalog-categories.mjs';
+-import {DEFAULT_SITE_ORIGIN} from './page-metadata.mjs';
++import {DEFAULT_SITE_ORIGIN,publiclyListed} from './page-metadata.mjs';
++import {contentCoverUrl} from './content-cover.mjs';
++import {contentShareData} from './content-share.mjs';
+ import DocumentMetadata from './document-metadata';
+ import ThemeToggle from './theme-toggle';
+ import PolicyContent from './policy-content';
+@@ -79,7 +81,7 @@ async function copy(s:string){try{await navigator.clipboard.writeText(s);notify(
+ const iconFor=(type:string)=>type==='course'?GraduationCap:type==='book'?BookOpen:type==='prompt'?Command:FileText;
+ function itemHref(p:Item){return p.externalMode==='card'&&externalUrl(p.externalUrl)||'/?view='+(p.type==='offer'?'offers':p.type)+'&item='+encodeURIComponent(p.id)}
+ function followItem(e:React.MouseEvent<HTMLAnchorElement>,p:Item){if(e.button!==0||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;e.preventDefault();open(p)}
+-function Card({p}:{p:Item}){const I=iconFor(p.type);return <article className={'product-card '+(p.type==='prompt'?'prompt-card':'')+(isEmailRegistrationOffer(p)?' registration-card':'')}><div className={'cover '+(p.theme||'blue')}><a className="cover-open" href={itemHref(p)} onClick={e=>followItem(e,p)} aria-label={txt(p)}>{p.cover?<img src={p.cover} alt=""/>:<><div className="cover-grid"/><span className="cover-label">ALKUNT <span>ACADEMY</span></span><div className="cover-art"><I strokeWidth={1.1}/><i/><i/></div><span className="cover-bottom">{p.type==='course'?'LEARN. CREATE. EVOLVE.':p.type==='prompt'?'PROMPT COLLECTION':'KNOWLEDGE, UNLOCKED.'}</span></>}<span className="cover-badge">{p.status==='draft'?t('مسودة','Draft'):p.status==='archived'?t('مؤرشف','Archived'):contentStatus(p)==='scheduled'?t('مجدول','Scheduled'):p.status==='coming'?t(messages.m007.ar,messages.m007.en):(p.price||p.inBundle)? t(messages.m008.ar,messages.m008.en):t(messages.m009.ar,messages.m009.en)}</span></a><button className={'favorite '+(data.favorites.includes(p.id)?'is-fav':'')} onClick={e=>{e.stopPropagation();user?act('favorite',{id:p.id}):signIn()}} aria-label={t(messages.m010.ar,messages.m010.en)}><Heart size={18} fill={data.favorites.includes(p.id)?'currentColor':'none'}/></button></div><div className="card-body"><div className="eyebrow">{txt(p,'category')||p.category||t(messages.m011.ar,messages.m011.en)}<span>•</span>{p.level==='advanced'?t(messages.m012.ar,messages.m012.en):t(messages.m013.ar,messages.m013.en)}</div><a className="title-btn" href={itemHref(p)} onClick={e=>followItem(e,p)}><h3>{txt(p)}</h3></a><p>{txt(p,'desc')}</p><div className="card-footer"><strong>{p.status==='coming'?t(messages.m014.ar,messages.m014.en):p.inBundle?t('ضمن الباقة','Included in bundle'):p.price?money(p.price):p.type==='blog'?t(messages.m015.ar,messages.m015.en):t(messages.m009.ar,messages.m009.en)}</strong>{externalUrl(p.externalUrl)&&<a className="small-btn" href={externalUrl(p.externalUrl)} target="_blank" rel="noopener noreferrer">{txt(p,'externalLabel')||t('فتح الرابط','Open link')}<ArrowUpLeft size={14}/></a>}<div className="card-share-actions"><a className="card-share" href={'https://wa.me/?text='+encodeURIComponent(txt(p)+' '+'https://alkunt-app-production.up.railway.app'+'/?view='+(p.type==='offer'?'offers':p.type)+'&item='+encodeURIComponent(p.id))} target="_blank" rel="noopener noreferrer" aria-label={t('مشاركة عبر واتساب','Share on WhatsApp')}>WhatsApp</a><CopyContentButton product={p} lang={lang} origin={siteOrigin} notify={notify} className="card-share" iconOnly/></div><a className="card-link" href={itemHref(p)} onClick={e=>followItem(e,p)} aria-label={t(messages.m016.ar,messages.m016.en)}><ArrowUpLeft size={20}/></a></div>{isEmailRegistrationOffer(p)?<div className="card-purchase"><a className="primary full" href={itemHref(p)} onClick={e=>followItem(e,p)}><Mail size={17}/>{t('التفاصيل والتسجيل بالبريد','Details & email registration')}</a></div>:(Number(p.price)>0||p.inBundle)&&<div className="card-purchase"><button className="primary full" disabled={contentStatus(p)!=='published'} onClick={()=>data.owned.includes(p.id)?open(p):cart.includes(p.inBundle?'prompt-bundle':p.id)?go('cart'):add(p)}><ShoppingBag size={17}/>{data.owned.includes(p.id)?t('فتح المحتوى','Open content'):cart.includes(p.inBundle?'prompt-bundle':p.id)?t('متابعة الشراء','Continue purchase'):t('إضافة إلى السلة','Add to cart')}</button></div>}</div></article>}
++function Card({p}:{p:Item}){const I=iconFor(p.type);return <article className={'product-card '+(p.type==='prompt'?'prompt-card':'')+(isEmailRegistrationOffer(p)?' registration-card':'')}><div className={'cover '+(p.theme||'blue')}><a className="cover-open" href={itemHref(p)} onClick={e=>followItem(e,p)} aria-label={txt(p)}>{(p.cover||publiclyListed(p))?<img src={contentCoverUrl(p,lang,siteOrigin)} alt=""/>:<><div className="cover-grid"/><span className="cover-label">ALKUNT <span>ACADEMY</span></span><div className="cover-art"><I strokeWidth={1.1}/><i/><i/></div><span className="cover-bottom">{p.type==='course'?'LEARN. CREATE. EVOLVE.':p.type==='prompt'?'PROMPT COLLECTION':'KNOWLEDGE, UNLOCKED.'}</span></>}<span className="cover-badge">{p.status==='draft'?t('مسودة','Draft'):p.status==='archived'?t('مؤرشف','Archived'):contentStatus(p)==='scheduled'?t('مجدول','Scheduled'):p.status==='coming'?t(messages.m007.ar,messages.m007.en):(p.price||p.inBundle)? t(messages.m008.ar,messages.m008.en):t(messages.m009.ar,messages.m009.en)}</span></a><button className={'favorite '+(data.favorites.includes(p.id)?'is-fav':'')} onClick={e=>{e.stopPropagation();user?act('favorite',{id:p.id}):signIn()}} aria-label={t(messages.m010.ar,messages.m010.en)}><Heart size={18} fill={data.favorites.includes(p.id)?'currentColor':'none'}/></button></div><div className="card-body"><div className="eyebrow">{txt(p,'category')||p.category||t(messages.m011.ar,messages.m011.en)}<span>•</span>{p.level==='advanced'?t(messages.m012.ar,messages.m012.en):t(messages.m013.ar,messages.m013.en)}</div><a className="title-btn" href={itemHref(p)} onClick={e=>followItem(e,p)}><h3>{txt(p)}</h3></a><p>{txt(p,'desc')}</p><div className="card-footer"><strong>{p.status==='coming'?t(messages.m014.ar,messages.m014.en):p.inBundle?t('ضمن الباقة','Included in bundle'):p.price?money(p.price):p.type==='blog'?t(messages.m015.ar,messages.m015.en):t(messages.m009.ar,messages.m009.en)}</strong>{externalUrl(p.externalUrl)&&<a className="small-btn" href={externalUrl(p.externalUrl)} target="_blank" rel="noopener noreferrer">{txt(p,'externalLabel')||t('فتح الرابط','Open link')}<ArrowUpLeft size={14}/></a>}<div className="card-share-actions"><a className="card-share" href={'https://wa.me/?text='+encodeURIComponent(contentShareData(p,lang,siteOrigin).text)} target="_blank" rel="noopener noreferrer" aria-label={t('مشاركة عبر واتساب','Share on WhatsApp')}>WhatsApp</a><CopyContentButton product={p} lang={lang} origin={siteOrigin} notify={notify} className="card-share" iconOnly/></div><a className="card-link" href={itemHref(p)} onClick={e=>followItem(e,p)} aria-label={t(messages.m016.ar,messages.m016.en)}><ArrowUpLeft size={20}/></a></div>{isEmailRegistrationOffer(p)?<div className="card-purchase"><a className="primary full" href={itemHref(p)} onClick={e=>followItem(e,p)}><Mail size={17}/>{t('التفاصيل والتسجيل بالبريد','Details & email registration')}</a></div>:(Number(p.price)>0||p.inBundle)&&<div className="card-purchase"><button className="primary full" disabled={contentStatus(p)!=='published'} onClick={()=>data.owned.includes(p.id)?open(p):cart.includes(p.inBundle?'prompt-bundle':p.id)?go('cart'):add(p)}><ShoppingBag size={17}/>{data.owned.includes(p.id)?t('فتح المحتوى','Open content'):cart.includes(p.inBundle?'prompt-bundle':p.id)?t('متابعة الشراء','Continue purchase'):t('إضافة إلى السلة','Add to cart')}</button></div>}</div></article>}
+ function Empty({title,desc}:{title:string,desc?:string}){return <div className="empty"><BookOpen size={38}/><h3>{title}</h3><p>{desc||t(messages.m017.ar,messages.m017.en)}</p></div>}
+ function SectionHead({title,desc,link}:{title:string,desc?:string,link?:string}){return <div className="section-head"><div><h2>{title}</h2>{desc&&<p>{desc}</p>}</div>{link&&<button className="text-link" onClick={()=>go(link)}>{t(messages.m018.ar,messages.m018.en)}<ArrowLeft size={17}/></button>}</div>}
+ let listed=view==='search'||view==='favorites'?products.filter((p:any)=>view!=='favorites'||data.favorites.includes(p.id)):view==='library'?products.filter((p:any)=>visibleInLibrary(p,data.purchased||[],false)):catalogItems(products,view);listed=listed.filter((p:any)=>(!query||(txt(p)+' '+txt(p,'desc')+' '+p.category).toLowerCase().includes(query.toLowerCase()))&&(isCatalogView(view)?matchesCatalogCategory(p,category):category==='all'||p.category===category)&&(filter==='all'||filter==='free'&&!p.inBundle&&p.price===0&&p.status==='published'||filter==='paid'&&(p.price>0||p.inBundle)||p.level===filter));if(sort==='price')listed.sort((a:any,b:any)=>a.price-b.price);else listed.sort((a:any,b:any)=>(b.created||'').localeCompare(a.created||''));
+diff --git a/server/content-cover-image.tsx b/server/content-cover-image.tsx
+new file mode 100644
+index 0000000..6b82bf7
+--- /dev/null
++++ b/server/content-cover-image.tsx
+@@ -0,0 +1,37 @@
++import {ImageResponse} from 'next/og';
++import {readFile} from 'node:fs/promises';
++import path from 'node:path';
++import {contentCoverVersion} from '../app/content-cover.mjs';
++let font:Promise<Buffer>|undefined;
++const images=new Map<string,Promise<ArrayBuffer>>();
++const palettes:any={blue:['#061b36','#104b80','#49d5ed'],purple:['#21123d','#4b2b76','#c3a1ff'],teal:['#052f38','#096975','#68eadb']};
++const labels:any={blog:'KNOWLEDGE, UNLOCKED.',prompt:'PROMPT COLLECTION',bundle:'PROMPT COLLECTION',course:'LEARN. CREATE. EVOLVE.',book:'YOUR NEXT CHAPTER',offer:'LEARN. CREATE. EVOLVE.'};
++const icons:any={blog:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z M14 2v6h6 M8 13h8 M8 17h5',book:'M12 7v14 M3 3h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5v16h-5a4 4 0 0 0-4 2 4 4 0 0 0-4-2H3Z',prompt:'M8 9l-4 3 4 3 M16 9l4 3-4 3 M14 5l-4 14',course:'M2 8l10-5 10 5-10 5Z M6 10v7c4 3 8 3 12 0v-7 M22 8v8'};
++export function generatedContentCover(product:any,language:string):Promise<ArrayBuffer> {
++  const key=product.id+':'+contentCoverVersion(product,language);
++  const saved=images.get(key);
++  if(saved)return saved;
++  const pending=render(product).catch(error=>{images.delete(key);throw error;});
++  if(images.size>=48)images.delete(images.keys().next().value!);
++  images.set(key,pending);
++  return pending;
++}
++async function render(product:any):Promise<ArrayBuffer> {
++  const [start,end,accent]=palettes[product.theme]||palettes.blue;
++  font ||= readFile(path.join(process.cwd(),'public/fonts/arabic-bold.ttf'));
++  // Use the same illustrated fallback in the catalog and sharing. The Arabic
++  // title is included separately in the caption and social metadata.
++  const response=new ImageResponse(<div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:'100%',height:'100%',padding:'50px 64px',background:`linear-gradient(125deg,${start},${end})`,color:'#fff',fontFamily:'ALKUNT',position:'relative',overflow:'hidden'}}>
++    {Array.from({length:13},(_,i)=><div key={'v'+i} style={{position:'absolute',left:i*100,top:0,height:630,borderLeft:'1px solid #ffffff0c'}}/>)}
++    {Array.from({length:7},(_,i)=><div key={'h'+i} style={{position:'absolute',top:i*100,left:0,width:1200,borderTop:'1px solid #ffffff0c'}}/>)}
++    <div style={{display:'flex',alignItems:'center',gap:14,fontSize:28,letterSpacing:4,color:'#dceefa'}}>ALKUNT <span style={{fontSize:17,color:accent,letterSpacing:3}}>ACADEMY</span></div>
++    <div style={{display:'flex',position:'absolute',left:445,top:160,width:310,height:310,borderRadius:'50%',border:`1px solid ${accent}`,background:'#ffffff08',alignItems:'center',justifyContent:'center'}}>
++      <div style={{position:'absolute',width:378,height:378,borderRadius:'50%',border:'1px solid #ffffff20'}}/>
++      <svg width="170" height="170" viewBox="0 0 24 24" fill="none" stroke="#e8f8ff" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round"><path d={icons[product.type]||icons.course}/></svg>
++    </div>
++    <div style={{position:'absolute',left:295,top:250,width:20,height:20,background:accent,borderRadius:'50%'}}/>
++    <div style={{position:'absolute',right:285,top:420,width:12,height:12,background:accent,borderRadius:'50%'}}/>
++    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',fontSize:23,letterSpacing:4,color:'#dceefa'}}><span>{labels[product.type]||labels.blog}</span><span style={{color:accent,fontSize:28}}>+</span></div>
++  </div>,{width:1200,height:630,fonts:[{name:'ALKUNT',data:await font,weight:700,style:'normal'}]});
++  return response.arrayBuffer();
++}
+diff --git a/server/public-metadata.mjs b/server/public-metadata.mjs
+index 59a44af..da7c70e 100644
+--- a/server/public-metadata.mjs
++++ b/server/public-metadata.mjs
+@@ -8,6 +8,6 @@ export function publicProductMetadata(id) {
+   let product;
+   try { product = JSON.parse(row.data); } catch { return null; }
+   if (!publiclyListed(product)) return null;
+-  return Object.fromEntries(['type', 'status', 'publishAt', 'title_ar', 'title_en', 'desc_ar', 'desc_en', 'cover']
++  return Object.fromEntries(['type', 'status', 'publishAt', 'title_ar', 'title_en', 'desc_ar', 'desc_en', 'cover', 'category_ar', 'category_en', 'category', 'theme']
+     .map(key => [key, product[key]]).concat([['id', id]]));
+ }
+diff --git a/tests/content-share.test.mjs b/tests/content-share.test.mjs
+index 5b6bf35..439db74 100644
+--- a/tests/content-share.test.mjs
++++ b/tests/content-share.test.mjs
+@@ -1,25 +1,39 @@
+ import assert from 'node:assert/strict';
+ import {contentShareUrl,contentShareData,contentShareHtml} from '../app/content-share.mjs';
++import {contentCoverVersion,contentCoverUrl} from '../app/content-cover.mjs';
++import {buildPageMetadata} from '../app/page-metadata.mjs';
+ 
+ const product={id:'lesson & 1',type:'offer',title_ar:'تعليم <تفاعلي> & "واضح"',title_en:'Interactive learning',cover:'/api/files?id=public-cover',body_ar:'PAID_PROMPT_MUST_NOT_BE_COPIED',file:'PRIVATE_ATTACHMENT'};
+ const data=contentShareData(product,'ar','https://example.test/admin?session=not-a-share-url');
+-assert.equal(data.url,'https://example.test/?view=offers&item=lesson+%26+1');
++assert.equal(data.url,'https://example.test/?view=offers&item=lesson+%26+1&share='+contentCoverVersion(product,'ar'));
+ assert.equal(data.image,'https://example.test/api/files?id=public-cover');
+ assert.equal(data.text,product.title_ar+'\n'+data.url);
+ assert.equal(data.language,'ar');
+-assert.equal(contentShareUrl({...product,type:'prompt'},'https://example.test'),'https://example.test/?view=prompt&item=lesson+%26+1');
++assert.equal(contentShareUrl({...product,type:'prompt'},'https://example.test'),'https://example.test/?view=prompt&item=lesson+%26+1&share='+contentCoverVersion({...product,type:'prompt'},'ar'));
+ assert.equal(contentShareData(product,'en','https://example.test').title,product.title_en);
+ for(const cover of ['',null,'javascript:alert(1)','https://user:secret@example.test/image.png','http://untrusted.test/image.png'])
+-  assert.equal(contentShareData({...product,cover},'ar','https://example.test').image,'https://example.test/alkunt-logo.png');
++  assert.equal(new URL(contentShareData({...product,cover},'ar','https://example.test').image).pathname,'/api/content-cover');
+ assert.equal(contentShareData({...product,cover:'https://cdn.example.test/image.jpg'},'ar','https://example.test').image,'https://cdn.example.test/image.jpg');
+ const image='data:image/png;base64,aW1hZ2U=';
+ const html=contentShareHtml(data,image);
+ assert.ok(html.includes('dir="rtl"'));
+ assert.ok(html.includes('تعليم &lt;تفاعلي&gt; &amp; &quot;واضح&quot;'));
+-assert.ok(html.includes('href="https://example.test/?view=offers&amp;item=lesson+%26+1"'));
++assert.ok(html.includes('href="'+data.url.replace(/&/g,'&amp;')+'"'));
+ assert.ok(html.includes('src="'+image+'"'));
+ assert.ok(!JSON.stringify({data,html}).includes('PAID_PROMPT'));
+ assert.ok(!JSON.stringify({data,html}).includes('PRIVATE_ATTACHMENT'));
+ assert.ok(!JSON.stringify({data,html}).includes('session='));
+ assert.throws(()=>contentShareHtml(data,'javascript:alert(1)'));
++const published={...product,type:'blog',status:'published',cover:'',theme:'teal',category_ar:'تعليم تفاعلي'};
++const shared=contentShareData(published,'ar','https://example.test');
++const params=Object.fromEntries(new URL(shared.url).searchParams);
++const metadata=buildPageMetadata(params,published,{origin:'https://example.test'});
++assert.equal(metadata.openGraph.images[0].url,shared.image);
++assert.equal(metadata.openGraph.url,shared.url);
++assert.equal(metadata.alternates.canonical,'https://example.test/?view=blog&item=lesson+%26+1');
++assert.ok(!shared.image.includes('logo'));
++assert.equal(contentCoverUrl({...published,cover:'/alkunt-logo.png'},'ar','https://example.test').includes('/api/content-cover?'),true);
++assert.notEqual(contentShareData({...published,title_ar:'عنوان جديد'},'ar','https://example.test').url,shared.url);
++assert.equal(contentShareData({...published,body_ar:'DIFFERENT SECRET',file:'SECRET FILE'},'ar','https://example.test').url,shared.url);
++assert.equal(new URL(contentShareData(published,'en','https://example.test').url).searchParams.get('lang'),'en');
+ console.log('Content sharing checks passed: canonical links, cover safety, escaped rich content, and no protected content in the clipboard.');
+diff --git a/tests/site-audit.test.mjs b/tests/site-audit.test.mjs
+index 779f6b4..6fa8c6f 100644
+--- a/tests/site-audit.test.mjs
++++ b/tests/site-audit.test.mjs
+@@ -22,8 +22,8 @@ assert.equal(metadata.robots.index,true);
+ assert.equal(JSON.stringify(metadata).includes('PRIVATE_'),false);
+ assert.equal(buildPageMetadata({view:'blog',item:product.id,lang:'en'},product,{origin,now}).title,'English article | ALKUNT');
+ assert.equal(buildPageMetadata({view:'blog',item:product.id},{...product,desc_ar:'',desc_en:''},{origin,now}).description,'مقال عربي | ALKUNT');
+-assert.equal(buildPageMetadata({view:'blog',item:product.id},{...product,cover:'javascript:alert(1)'},{origin,now}).openGraph.images[0].url,origin+'/alkunt-logo.png');
+-assert.equal(buildPageMetadata({view:'blog',item:product.id},{...product,cover:'https://user:pass@example.test/private'},{origin,now}).openGraph.images[0].url,origin+'/alkunt-logo.png');
++assert.equal(new URL(buildPageMetadata({view:'blog',item:product.id},{...product,cover:'javascript:alert(1)'},{origin,now}).openGraph.images[0].url).pathname,'/api/content-cover');
++assert.equal(new URL(buildPageMetadata({view:'blog',item:product.id},{...product,cover:'https://user:pass@example.test/private'},{origin,now}).openGraph.images[0].url).pathname,'/api/content-cover');
+ 
+ for (const patch of [{status:'draft'},{status:'archived'},{publishAt:'2026-11-01T00:00:00Z'},{publishAt:'invalid date'},{id:'different-id'},{type:'book'}]) {
+   const result = buildPageMetadata({view:'blog',item:product.id},{...product,...patch,title_ar:'SECRET DRAFT TITLE'},{origin,now});
