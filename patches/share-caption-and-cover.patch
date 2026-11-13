@@ -1,0 +1,336 @@
+diff --git a/app/content-share.css b/app/content-share.css
+index a5f1a89..2def6ee 100644
+--- a/app/content-share.css
++++ b/app/content-share.css
+@@ -1,15 +1,21 @@
+-.content-share-dialog{position:fixed;inset:0;width:min(520px,calc(100% - 32px));max-height:calc(100dvh - 40px);margin:auto;padding:24px;border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);box-shadow:var(--shadow);overflow:auto;text-align:start}
++.content-share-dialog{position:fixed;inset:0;width:min(560px,calc(100% - 32px));max-height:calc(100dvh - 40px);margin:auto;padding:20px;border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);box-shadow:var(--shadow);overflow:auto;text-align:start}
+ .content-share-dialog::backdrop{background:#0009}
+-.content-share-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
++.content-share-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px;position:sticky;top:0;z-index:1;background:var(--surface)}
+ .content-share-heading h2{font-size:20px;line-height:1.6;margin:0}
+ .content-share-heading .small-btn{flex-shrink:0}
+-.content-share-dialog>p{line-height:1.8;color:var(--muted)}
+-.content-share-preview{display:block;width:100%;height:200px;object-fit:contain;margin:18px 0;border-radius:10px;background:var(--bg)}
+-.content-share-title{display:block;margin:10px 0;font-size:17px;line-height:1.7}
+-.content-share-link{display:grid;gap:8px;margin:16px 0}
+-.content-share-link input{width:100%;min-width:0;font:inherit;font-size:13px;padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);text-align:left}
+-.content-share-buttons{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
++.content-share-dialog>p{line-height:1.75;color:var(--muted);font-size:14px}
++.content-share-card{display:block;margin:12px 0;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--bg);text-decoration:none}
++.content-share-preview{display:block;width:100%;height:144px;object-fit:contain;background:var(--bg)}
++.content-share-card>div{padding:10px 14px}
++.content-share-title{display:block;font-size:16px;line-height:1.65}
++.content-share-domain{display:block;margin-top:6px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
++.content-share-caption{display:grid;gap:8px;margin:12px 0;font-size:14px}
++.content-share-caption textarea{width:100%;min-width:0;min-height:100px;resize:vertical;font:inherit;font-size:14px;line-height:1.8;padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);overflow-wrap:anywhere;text-align:start}
++.content-share-buttons{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
++.content-share-buttons>button,.content-share-buttons>a{min-width:0;min-height:44px;justify-content:center;font-size:13px;text-align:center;line-height:1.6}
++.content-share-buttons>:nth-child(3):last-child{grid-column:1/-1}
+ .content-share-status{min-height:1.8em;margin-bottom:0}
+ .content-share-dialog a{color:var(--text);text-underline-offset:4px}
+-.content-share-dialog button:focus-visible,.content-share-dialog a:focus-visible,.content-share-dialog input:focus-visible{outline:3px solid #63adf7;outline-offset:3px}
+-@media(max-width:480px){.content-share-dialog{padding:18px}.content-share-buttons>button{width:100%;justify-content:center}.content-share-preview{height:170px}}
++.content-share-image-link{font-size:13px}
++.content-share-dialog button:focus-visible,.content-share-dialog a:focus-visible,.content-share-dialog textarea:focus-visible{outline:3px solid #63adf7;outline-offset:3px}
++@media(max-width:480px){.content-share-dialog{padding:18px}.content-share-preview{height:130px}.content-share-buttons{grid-template-columns:1fr}.content-share-caption textarea{font-size:13px;min-height:170px}.content-share-title{font-size:16px}}
+diff --git a/app/content-share.mjs b/app/content-share.mjs
+index 4376dbf..e6a40dd 100644
+--- a/app/content-share.mjs
++++ b/app/content-share.mjs
+@@ -23,6 +23,30 @@ export function contentShareData(product, language, origin) {
+ const escapeHtml = value => String(value).replace(/[&<>"']/g, character =>
+   ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[character]));
+ 
++export function contentShareFileData(data, file) {
++  if (!file || file.type !== 'image/png' || !file.size) throw Error('A PNG cover is required.');
++  // File-share targets may ignore a separate URL member; keep it in the caption.
++  return {title:data.title, text:data.text, files:[file]};
++}
++
++export function canShareContentFile(data, file, navigator) {
++  if (typeof navigator?.share !== 'function' || typeof navigator?.canShare !== 'function') return false;
++  try { return navigator.canShare(contentShareFileData(data,file)) === true; }
++  catch { return false; }
++}
++
++export function shareContentFile(data, file, navigator) {
++  if (!canShareContentFile(data,file,navigator)) throw Error('File sharing unavailable.');
++  // Start during the click; the PNG is already prepared.
++  return navigator.share(contentShareFileData(data,file));
++}
++
++export async function copyContentShareText(data, clipboard) {
++  if (typeof clipboard?.writeText !== 'function') throw Error('Text copy unavailable.');
++  // Clipboard formats are alternatives, not a photo attachment with a caption.
++  await clipboard.writeText(data.text);
++}
++
+ export function contentShareHtml(data, imageDataUrl) {
+   if (!/^data:image\/png;base64,[a-z\d+/=]+$/i.test(imageDataUrl)) throw Error('A PNG cover is required.');
+   const title = escapeHtml(data.title), url = escapeHtml(data.url);
+diff --git a/app/copy-content-button.tsx b/app/copy-content-button.tsx
+index f9f8853..fae8132 100644
+--- a/app/copy-content-button.tsx
++++ b/app/copy-content-button.tsx
+@@ -1,8 +1,12 @@
+ 'use client';
+ 
+-import {useEffect,useId,useRef,useState} from 'react';
+-import {Copy,Download,X} from 'lucide-react';
+-import {contentShareData,contentShareHtml} from './content-share.mjs';
++import {createContext,useCallback,useContext,useEffect,useId,useRef,useState,type ReactNode} from 'react';
++import {Copy,Download,Share2,X} from 'lucide-react';
++import {contentShareData,canShareContentFile,shareContentFile,copyContentShareText} from './content-share.mjs';
++
++type ShareData = {title:string;url:string;image:string;text:string;language:string};
++type ShareRequest = {data:ShareData;trigger:HTMLButtonElement};
++const ShareContext = createContext<((request:ShareRequest)=>void)|null>(null);
+ 
+ function coverPng(url:string):Promise<Blob> {
+   return new Promise((resolve,reject)=>{
+@@ -28,91 +32,104 @@ function coverPng(url:string):Promise<Blob> {
+   });
+ }
+ 
+-function dataUrl(blob:Blob):Promise<string> {
+-  return new Promise((resolve,reject)=>{
+-    const reader = new FileReader();
+-    reader.onload = ()=>resolve(String(reader.result));
+-    reader.onerror = ()=>reject(Error('Cover unreadable'));
+-    reader.readAsDataURL(blob);
+-  });
++// Host the dialog outside cards, which can remount on catalog and toast updates.
++export function ContentShareProvider({children}:{children:ReactNode}) {
++  const [request,setRequest] = useState<ShareRequest|null>(null);
++  const openShare = useCallback((next:ShareRequest)=>setRequest(next),[]);
++  function closeShare() {
++    const previous = request;
++    setRequest(null);
++    window.setTimeout(()=>{
++      const trigger = previous?.trigger.isConnected ? previous.trigger :
++        [...document.querySelectorAll<HTMLButtonElement>('button[data-share-content]')].find(button=>button.dataset.shareContent===previous?.data.url);
++      trigger?.focus();
++    },0);
++  }
++  return <ShareContext.Provider value={openShare}>{children}{request&&<ContentShareDialog key={request.data.url} data={request.data} onClose={closeShare}/>}</ShareContext.Provider>;
+ }
+ 
+-type Props = {product:any;lang:string;origin?:string;notify:(message:string)=>void;className?:string;iconOnly?:boolean};
+-
+-export default function CopyContentButton({product,lang,origin,notify,className='secondary',iconOnly=false}:Props) {
+-  const [busy,setBusy] = useState(false),[fallback,setFallback] = useState(false),[message,setMessage] = useState('');
+-  const [downloading,setDownloading] = useState(false);
+-  const dialog = useRef<HTMLDialogElement>(null),linkInput = useRef<HTMLInputElement>(null);
+-  const headingId = useId();
+-  const data = contentShareData(product,lang,origin);
+-  const t = (ar:string,en:string)=>lang==='ar'?ar:en;
+-  const label = t('نسخ الرابط والغلاف','Copy link and cover');
++function ContentShareDialog({data,onClose}:{data:ShareData;onClose:()=>void}) {
++  const dialog = useRef<HTMLDialogElement>(null),caption = useRef<HTMLTextAreaElement>(null);
++  const headingId = useId(),helpId = useId();
++  const [file,setFile] = useState<File|null>(null),[preparing,setPreparing] = useState(true);
++  const [coverError,setCoverError] = useState(false);
++  const [copying,setCopying] = useState(false),[sharing,setSharing] = useState(false),[downloading,setDownloading] = useState(false),[message,setMessage] = useState('');
++  const t = (ar:string,en:string)=>data.language==='ar'?ar:en;
++  const nativeSharing = typeof navigator!=='undefined' && typeof navigator.share==='function';
++  const canShareFile = !!file && canShareContentFile(data,file,navigator);
+ 
+   useEffect(()=>{
+-    if (fallback && dialog.current && !dialog.current.open) dialog.current.showModal();
+-  },[fallback]);
++    if (dialog.current && !dialog.current.open) dialog.current.showModal();
++    let cancelled = false;
++    coverPng(data.image).then(blob=>{
++      if (!cancelled) setFile(new File([blob],'ALKUNT-cover.png',{type:'image/png'}));
++    }).catch(()=>{if (!cancelled) setCoverError(true);}).finally(()=>{if (!cancelled) setPreparing(false);});
++    return ()=>{cancelled=true;};
++  },[data.image]);
+ 
+-  async function copyContent() {
+-    if (busy) return;
+-    setBusy(true);
++  async function copyCaption() {
++    setCopying(true);
+     try {
+-      if (!navigator.clipboard?.write || typeof ClipboardItem==='undefined' ||
+-          typeof ClipboardItem.supports==='function' &&
+-          (!ClipboardItem.supports('image/png') || !ClipboardItem.supports('text/html'))) throw Error('Rich copy unavailable');
+-      const png = coverPng(data.image);
+-      const html = png.then(dataUrl).then(image=>new Blob([contentShareHtml(data,image)],{type:'text/html'}));
+-      // Promised representations let the write start within the user's click,
+-      // even when downloading or converting the cover takes a moment.
+-      void png.catch(()=>{}); void html.catch(()=>{});
+-      await navigator.clipboard.write([new ClipboardItem({
+-        'text/plain':new Blob([data.text],{type:'text/plain'}),
+-        'text/html':html,
+-        'image/png':png
+-      })]);
+-      notify(t('تم نسخ الغلاف والعنوان والرابط.','Cover, title and link copied.'));
++      await copyContentShareText(data,navigator.clipboard);
++      setMessage(t('تم نسخ العنوان والرابط. الصقهما في رسالتك لتظهر معاينة الغلاف في التطبيقات الداعمة.','Title and link copied. Paste them into your message for a cover preview in supported apps.'));
+     } catch {
+-      setMessage('');
+-      setFallback(true);
+-    } finally { setBusy(false); }
++      caption.current?.focus();caption.current?.select();
++      setMessage(t('نص المشاركة محدد أدناه. انسخه يدويًا ليبقى العنوان والرابط معًا.','The share text is selected below. Copy it manually to keep the title and link together.'));
++    } finally {setCopying(false);}
+   }
+ 
+-  async function copyLink() {
++  async function shareCover() {
++    if (!file || sharing) return;
++    setSharing(true);
+     try {
+-      await navigator.clipboard.writeText(data.text);
+-      setMessage(t('تم نسخ العنوان والرابط. أرفق صورة الغلاف معهما.','Title and link copied. Attach the cover image with them.'));
+-    } catch {
+-      linkInput.current?.focus();linkInput.current?.select();
+-      setMessage(t('حدّد الرابط وانسخه من الحقل أدناه.','Select and copy the link from the field below.'));
+-    }
++      await shareContentFile(data,file,navigator);
++      setMessage(t('سُلّم الغلاف والنص إلى قائمة المشاركة. راجع التعليق في التطبيق قبل الإرسال.','Cover and text handed to sharing. Check the caption in your chosen app before sending.'));
++    } catch (error:any) {
++      setMessage(error?.name==='AbortError' ? t('أُغلقت نافذة المشاركة.','The share window was closed.') :
++        t('تعذّر فتح المشاركة. انسخ العنوان والرابط واحفظ الغلاف لإرفاقه مع النص.','Sharing could not open. Copy the title and link, then save the cover to attach it with the text.'));
++    } finally {setSharing(false);}
+   }
+ 
+   async function downloadCover() {
+     setDownloading(true);
+     try {
+-      const blob = await coverPng(data.image),url = URL.createObjectURL(blob);
++      const blob = file || await coverPng(data.image),url = URL.createObjectURL(blob);
+       const anchor = document.createElement('a');
+-      anchor.href = url;anchor.download = 'ALKUNT-cover.png';
++      anchor.href=url;anchor.download='ALKUNT-cover.png';
+       document.body.append(anchor);anchor.click();anchor.remove();
+       window.setTimeout(()=>URL.revokeObjectURL(url),10000);
+-      setMessage(t('جُهّز الغلاف للتنزيل. انسخ الرابط وأرفقه معه.','Cover prepared for download. Copy the link and include it with the image.'));
++      setMessage(t('جُهّز الغلاف للتنزيل. أرفقه مع نص المشاركة الظاهر أدناه.','Cover prepared for download. Attach it with the share text shown below.'));
+     } catch {
+-      setMessage(t('تعذّر تنزيل الغلاف. يمكنك فتح الصورة وحفظها من الرابط أدناه.','Cover download failed. Open the image below to save it.'));
+-    } finally { setDownloading(false); }
++      setCoverError(true);
++      setMessage(t('تعذّر تنزيل الغلاف. افتح صورته من المعاينة واحفظها، ثم أرفق نص المشاركة.','Cover download failed. Open the preview image to save it, then include the share text.'));
++    } finally {setDownloading(false);}
+   }
+ 
+-  return <>
+-    <button type="button" className={className} aria-label={label} title={label} aria-busy={busy} disabled={busy} onClick={copyContent}>
+-      <Copy size={iconOnly?15:16} aria-hidden="true"/>{!iconOnly&&label}
+-    </button>
+-    {fallback&&<dialog ref={dialog} className="content-share-dialog" aria-labelledby={headingId} dir={lang==='ar'?'rtl':'ltr'} onCancel={()=>setFallback(false)} onClose={()=>setFallback(false)}>
+-      <div className="content-share-heading"><h2 id={headingId}>{t('مشاركة الغلاف والرابط','Share the cover and link')}</h2><button type="button" className="small-btn" aria-label={t('إغلاق','Close')} onClick={()=>setFallback(false)}><X size={19}/></button></div>
+-      <p>{t('تعذّر نسخهما معًا في هذا المتصفح. احفظ الغلاف وانسخ الرابط لإرفاقهما في رسالتك.','This browser could not copy both together. Save the cover and copy the link to include them in your message.')}</p>
+-      <img className="content-share-preview" src={data.image} alt={data.title}/>
+-      <strong className="content-share-title">{data.title}</strong>
+-      <label className="content-share-link">{t('رابط المحتوى','Content link')}<input ref={linkInput} readOnly value={data.url} dir="ltr" onFocus={event=>event.currentTarget.select()}/></label>
+-      <div className="content-share-buttons"><button type="button" className="primary" onClick={copyLink}><Copy size={16}/>{t('نسخ العنوان والرابط','Copy title and link')}</button><button type="button" className="secondary" disabled={downloading} onClick={downloadCover}><Download size={16}/>{t('حفظ صورة الغلاف','Save cover image')}</button></div>
+-      <a href={data.image} target="_blank" rel="noopener noreferrer">{t('فتح صورة الغلاف','Open cover image')}</a>
+-      <p className="content-share-status" role="status" aria-live="polite">{message}</p>
+-    </dialog>}
+-  </>;
++  return <dialog ref={dialog} role="dialog" className="content-share-dialog" aria-labelledby={headingId} aria-describedby={helpId} dir={data.language==='ar'?'rtl':'ltr'} onCancel={event=>{event.preventDefault();onClose();}}>
++    <div className="content-share-heading"><h2 id={headingId}>{t('مشاركة البطاقة','Share card')}</h2><button type="button" className="small-btn" aria-label={t('إغلاق','Close')} onClick={onClose}><X size={19}/></button></div>
++    <p id={helpId}>{t('شارك العنوان والرابط مع معاينة الغلاف، أو أرفق الغلاف مع نص المشاركة.','Share the title and link with a cover preview, or attach the cover with the share text.')}</p>
++    <a className="content-share-card" href={data.url} target="_blank" rel="noopener noreferrer" aria-label={t('فتح البطاقة: ','Open card: ')+data.title}>
++      <img className="content-share-preview" src={data.image} alt=""/>
++      <div><strong className="content-share-title">{data.title}</strong><span className="content-share-domain" dir="ltr">{new URL(data.url).hostname}</span></div>
++    </a>
++    <label className="content-share-caption">{t('نص المشاركة — العنوان والرابط','Share text — title and link')}<textarea ref={caption} readOnly rows={3} value={data.text} dir="auto" onFocus={event=>event.currentTarget.select()}/></label>
++    <div className="content-share-buttons">
++      <button type="button" className="primary" disabled={copying} onClick={copyCaption}><Copy size={16}/>{t('نسخ العنوان والرابط','Copy title and link')}</button>
++      <a className="secondary" href={'https://wa.me/?text='+encodeURIComponent(data.text)} target="_blank" rel="noopener noreferrer">{t('مشاركة عبر واتساب','Share on WhatsApp')}</a>
++      {nativeSharing&&(preparing||canShareFile)&&<button type="button" className="secondary" disabled={preparing||!canShareFile||sharing} onClick={shareCover}><Share2 size={16}/>{preparing?t('جارٍ تجهيز الغلاف…','Preparing cover…'):t('مشاركة الغلاف مع النص','Share cover with text')}</button>}
++      <button type="button" className="small-btn" disabled={downloading} onClick={downloadCover}><Download size={16}/>{t('حفظ صورة الغلاف','Save cover image')}</button>
++    </div>
++    {coverError&&<a className="content-share-image-link" href={data.image} target="_blank" rel="noopener noreferrer">{t('فتح صورة الغلاف','Open cover image')}</a>}
++    <p className="content-share-status" role="status" aria-live="polite">{message}</p>
++  </dialog>;
++}
++
++type Props = {product:any;lang:string;origin?:string;notify:(message:string)=>void;className?:string;iconOnly?:boolean};
++export default function CopyContentButton({product,lang,origin,className='secondary',iconOnly=false}:Props) {
++  const openShare = useContext(ShareContext);
++  const data = contentShareData(product,lang,origin);
++  const label = lang==='ar'?'مشاركة البطاقة':'Share card';
++  return <button type="button" className={className} aria-label={label} title={label} data-share-content={data.url} onClick={event=>openShare?.({data,trigger:event.currentTarget})}>
++    <Share2 size={iconOnly?15:16} aria-hidden="true"/>{!iconOnly&&label}
++  </button>;
+ }
+diff --git a/app/platform.tsx b/app/platform.tsx
+index ce14b3e..f8a425c 100644
+--- a/app/platform.tsx
++++ b/app/platform.tsx
+@@ -19,7 +19,7 @@ import {ArrowUpLeft,ArrowUpRight,ArrowLeft,Search,ShoppingBag,Heart,Globe,BookOp
+ import {seed,initialSettings} from './platform-data';
+ import messages from './messages.json';
+ import ContentPage from './content-page';
+-import CopyContentButton from './copy-content-button';
++import CopyContentButton,{ContentShareProvider} from './copy-content-button';
+ import SignIn from './auth-form';
+ import OrderDeleteDialog from './order-delete-dialog';
+ import AccountSecurity from './account-security';
+@@ -36,7 +36,10 @@ import GumroadCheckout,{GumroadOrderStatus,GumroadConnectionStatus} from './gumr
+ import {visibleInLibrary,contentStatus} from './catalog-rules';
+ import {guestNotifications,updateGuestNotifications} from './guest-notifications.mjs';
+ type Item=any;
+-export default function Platform({siteOrigin=DEFAULT_SITE_ORIGIN}:{siteOrigin?:string}){
++export default function Platform(props:{siteOrigin?:string}){
++return <ContentShareProvider><PlatformContent {...props}/></ContentShareProvider>;
++}
++function PlatformContent({siteOrigin=DEFAULT_SITE_ORIGIN}:{siteOrigin?:string}){
+ const [lang,setLang]=useState('ar'),[view,setView]=useState('home'),[query,setQuery]=useState(''),[category,setCategory]=useState('all'),[filter,setFilter]=useState('all'),[sort,setSort]=useState('new'),[data,setData]=useState<any>({products:seed,settings:initialSettings,owned:[],favorites:[],orders:[],progress:{},notifications:[],expenses:[],coupons:[],customers:[],audit:[]}),[loading,setLoading]=useState(true),[error,setError]=useState(''),[cart,setCart]=useState<string[]>([]),[modal,setModal]=useState<any>(null),[toast,setToast]=useState(''),[busy,setBusy]=useState(false),[adminTab,setAdminTab]=useState('overview'),[install,setInstall]=useState<any>(null),[lesson,setLesson]=useState(0),[coupon,setCoupon]=useState(''),[period,setPeriod]=useState('all');
+ const [notificationBusy,setNotificationBusy]=useState(false);
+ const [readerId,setReaderId]=useState('');const boot=useRef(true);const ar=lang==='ar',t=(a:string,b:string)=>ar?a:b,txt=(p:any,f='title')=>localizedText(p,lang,f),money=(n:number)=>new Intl.NumberFormat(ar?'ar-KW':'en-US',{style:'currency',currency:data.settings.currency||'KWD'}).format(n||0);
+diff --git a/tests/content-share.test.mjs b/tests/content-share.test.mjs
+index 439db74..46ab9c1 100644
+--- a/tests/content-share.test.mjs
++++ b/tests/content-share.test.mjs
+@@ -1,5 +1,5 @@
+ import assert from 'node:assert/strict';
+-import {contentShareUrl,contentShareData,contentShareHtml} from '../app/content-share.mjs';
++import {contentShareUrl,contentShareData,contentShareHtml,contentShareFileData,canShareContentFile,shareContentFile,copyContentShareText} from '../app/content-share.mjs';
+ import {contentCoverVersion,contentCoverUrl} from '../app/content-cover.mjs';
+ import {buildPageMetadata} from '../app/page-metadata.mjs';
+ 
+@@ -36,4 +36,36 @@ assert.equal(contentCoverUrl({...published,cover:'/alkunt-logo.png'},'ar','https
+ assert.notEqual(contentShareData({...published,title_ar:'عنوان جديد'},'ar','https://example.test').url,shared.url);
+ assert.equal(contentShareData({...published,body_ar:'DIFFERENT SECRET',file:'SECRET FILE'},'ar','https://example.test').url,shared.url);
+ assert.equal(new URL(contentShareData(published,'en','https://example.test').url).searchParams.get('lang'),'en');
+-console.log('Content sharing checks passed: canonical links, cover safety, escaped rich content, and no protected content in the clipboard.');
++// Copy a complete text message, not a PNG representation that drops the caption.
++let copiedText='',richWrites=0;
++await copyContentShareText(data,{writeText:async value=>{copiedText=value;},write:async()=>{richWrites++;}});
++assert.equal(copiedText,data.title+'\n'+data.url);
++assert.equal(richWrites,0);
++await assert.rejects(copyContentShareText(data,{}),/unavailable/);
++await assert.rejects(copyContentShareText(data,{writeText:async()=>{throw Error('permission denied');}}),/permission denied/);
++const file=new File(['public cover pixels'],'ALKUNT-cover.png',{type:'image/png'});
++const nativePayload=contentShareFileData({...data,body:'SECRET_BODY',file:'SECRET_ATTACHMENT'},file);
++assert.deepEqual(Object.keys(nativePayload),['title','text','files']);
++assert.equal(nativePayload.files[0],file);
++assert.equal(nativePayload.text,data.title+'\n'+data.url);
++assert.equal(nativePayload.text.split(data.url).length-1,1);
++assert.ok(!JSON.stringify(nativePayload).includes('SECRET_'));
++assert.throws(()=>contentShareFileData(data,new File(['private'],'private.pdf',{type:'application/pdf'})));
++assert.equal(canShareContentFile(data,file,{}),false);
++assert.equal(canShareContentFile(data,file,{share(){},canShare(){throw Error('unsupported');}}),false);
++let sharedPayload;
++const native={canShare:payload=>payload.files?.[0]===file,share:payload=>{sharedPayload=payload;return Promise.resolve();}};
++assert.equal(canShareContentFile(data,file,native),true);
++await shareContentFile(data,file,native);
++assert.deepEqual(sharedPayload,nativePayload);
++assert.throws(()=>shareContentFile(data,file,{canShare:()=>false,share(){throw Error('must not open');}}),/unavailable/);
++for(const type of ['blog','prompt','book','course','offer'])for(const lang of ['ar','en']){
++  const presentation=contentShareData({...product,type},lang,'https://example.test');
++  const payload=contentShareFileData(presentation,file);
++  assert.equal(payload.files.length,1);
++  assert.ok(payload.text.includes(presentation.title));
++  assert.ok(payload.text.includes(presentation.url));
++  assert.equal(new URL(presentation.url).searchParams.get('view'),type==='offer'?'offers':type);
++  assert.ok(!JSON.stringify(payload).includes('PRIVATE_ATTACHMENT'));
++}
++console.log('Content sharing checks passed: text retains title and direct URL; native file sharing carries the PNG plus caption; cover metadata matches; protected content excluded.');
