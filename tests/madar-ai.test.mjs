@@ -47,6 +47,23 @@ try{
  const edited=await request('/api/card',{method:'POST',body:{card:deck.cards[1],instruction:'اختصر البطاقة',deckTitle:deck.title}});assert.equal(edited.status,200);assert.equal((await edited.json()).card.title,'بطاقة معدّلة');
  assert.equal((await config('bob')).plan.remaining,200);
  const beforeBob=calls.length;await completed(await request('/api/outline',{user:'bob',method:'POST',body:{mode:'generate',prompt:'BOB_PRIVATE_TOPIC موضوع مختلف',cardCount:3}}));assert.equal(calls.length,beforeBob+1);assert.ok(JSON.stringify(calls.at(-1)).includes('BOB_PRIVATE_TOPIC'));assert.equal(JSON.stringify(calls.at(-1)).includes('ALICE_PRIVATE_TOPIC'),false);
+ // Valid Arabic requests used to fail locally because UTF-8 bytes were treated as tokens.
+ const arabic='صمم عرضًا عن تنظيم وقت التعلم، يبدأ بتحديد الهدف وتقسيم المهام، ثم يوضح أساليب المراجعة اليومية مع أمثلة واقعية وخطة أسبوعية قابلة للتطبيق. ';
+ const idea=(arabic.repeat(40)).slice(0,3980)+' <|endoftext|>';
+ const ideaStart=calls.length;
+ await completed(await request('/api/outline',{method:'POST',body:{mode:'generate',prompt:idea,cardCount:3}}));
+ assert.equal(calls.length,ideaStart+1);assert.ok(calls.at(-1).messages[1].content.includes(idea),'The entire accepted idea reaches the model, including literal token-like text.');
+ const source='بداية المصدر العربي\n'+arabic.repeat(58)+'\nنهاية المصدر: مراجعة الخطة وتحديث الأولويات.';
+ const textOutline=await completed(await request('/api/outline',{method:'POST',body:{mode:'text',text:source,cardCount:3}}));
+ const textCall=calls.at(-1);
+ const previousReservation=8000-Math.ceil(new TextEncoder().encode(JSON.stringify(textCall.messages)+JSON.stringify(textCall.response_format.json_schema.schema)).byteLength/2)-600;
+ assert.ok(previousReservation<700,'Regression source reproduces the previous false capacity rejection.');
+ assert.equal(textOutline.sourceText,source,'Keep the complete source for the subsequent writing step.');
+ assert.ok(textCall.messages[1].content.includes(source),'Do not silently shorten Arabic source text.');
+ assert.ok(textCall.max_completion_tokens>2000,'Reserve useful output space after counting Arabic tokens.');
+ assert.ok(textCall.messages[0].content.includes('The complete source is retained for the writer'));
+ await completed(await request('/api/generate',{method:'POST',body:{outline:textOutline,sourceText:textOutline.sourceText}}));
+ assert.ok(calls.at(-1).messages[1].content.includes(source),'The writer also receives the complete original source.');
  for(mode of ['limited','bad-key','timeout','invalid']){
   const before=(await config()).plan.remaining;
   const {content,events}=await readEvents(await request('/api/outline',{method:'POST',body:{mode:'generate',prompt:'فحص تعذر التوليد',cardCount:3}}));
@@ -66,7 +83,7 @@ try{
  assert.deepEqual(bobStore.listDecks(),[]);assert.equal(bobStore.loadDeck('sameid'),null);
  bobStore.saveDeck({id:'sameid',title:'Bob local secret',cards:[{title:'Bob card'}]});
  assert.equal(aliceStore.loadDeck('sameid').title,'Alice local secret');assert.equal(bobStore.loadDeck('sameid').title,'Bob local secret');
- console.log('PASS: private AI request contexts, structured Arabic outline/deck/assistant/card flows, provider selection, no secret exposure, failed-request refunds, input limits and separate local libraries.');
+ console.log('PASS: private AI contexts, complete Arabic idea/source outlines and writing without byte-based false rejections, provider selection, no secret exposure, failed-request refunds, genuine input limits and separate local libraries.');
 }finally{
  globalThis.fetch=originalFetch;
  if(originalDocument===undefined)delete globalThis.document;else globalThis.document=originalDocument;
