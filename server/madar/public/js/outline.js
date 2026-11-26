@@ -182,7 +182,7 @@ export function mountOutline(root) {
             o.cards.push({ title: c.title, points: c.points || [] });
             renderList();
           },
-          notice: ({ message }) => toast(message, 'info'),
+          notice: ({ message }) => { status.textContent = message; },
         },
         { signal: ctrl.signal },
       );

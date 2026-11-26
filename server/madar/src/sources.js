@@ -1,6 +1,7 @@
 // Reads uploaded PDFs and photos into plain text with free Workers AI tools, for the free text engine
 // (Claude reads these files natively, so this path is only used without an ANTHROPIC_API_KEY).
-import { cfText } from './ai.js';
+import { AIError, cfText } from './ai.js';
+import { groqCompletion } from './groq-client.js';
 
 const VISION_MODEL = '@cf/google/gemma-4-26b-a4b-it';
 
@@ -38,45 +39,26 @@ const READ_PROMPT =
   '(Arabic stays in Arabic, right to left). Then, after a line "---", briefly describe any diagrams, charts, tables or photos ' +
   'and what they show, in the same language as the text. Output plain text only, without commentary.';
 
-// Free vision model on Groq: reads files first, so Cloudflare's daily allowance is not the only way to read them.
-async function readWithGroq(env, images) {
+// Read files on the configured Groq connection, without forwarding them elsewhere on failure.
+async function readWithGroq(env, images, options) {
   const content = [
     { type: 'text', text: READ_PROMPT },
     ...images.map((im) => ({ type: 'image_url', image_url: { url: `data:${im.media_type};base64,${im.data}` } })),
   ];
   const body = { model: env.GROQ_VISION_MODEL || 'qwen/qwen3.8-27b', messages: [{ role: 'user', content }], max_completion_tokens: 4000, temperature: 0.1, reasoning_format: 'hidden' };
-  const send = (b) =>
-    fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(b),
-      signal: AbortSignal.timeout(50000),
-    });
-  let res = await send(body);
-  let data = await res.json().catch(() => ({}));
+  let { res, data } = await groqCompletion(env, body, options);
   if (res.status === 400 && /reasoning/i.test(data?.error?.message || '')) {
     delete body.reasoning_format;
-    res = await send(body);
-    data = await res.json().catch(() => ({}));
+    ({ res, data } = await groqCompletion(env, body, options));
   }
-  const wait = res.status === 429 ? Number(String(data?.error?.message || '').match(/try again in (\d+(?:\.\d+)?)s\b/)?.[1]) : NaN;
-  if (wait > 0 && wait <= 12) {
-    await new Promise((r) => setTimeout(r, (wait + 0.4) * 1000));
-    res = await send(body);
-    data = await res.json().catch(() => ({}));
-  }
-  if (!res.ok) throw new Error(`groq vision ${res.status}: ${data?.error?.message || ''}`);
+  if (res.status === 429) throw new AIError('خدمة قراءة الملف مزدحمة مؤقتًا. أعد المحاولة بعد قليل؛ لم تُخصم نقاط العملية الفاشلة.', 'rate_limit');
+  if (!res.ok) throw new AIError('تعذّرت قراءة الملف من خدمة التوليد. جرّب مجددًا أو الصق نصه.', 'read');
   return tidy(String(data?.choices?.[0]?.message?.content || '').replace(/<think>[\s\S]*?<\/think>/gi, ''));
 }
 
-async function readBatch(env, images) {
+async function readBatch(env, images, options) {
   if (env.GROQ_API_KEY) {
-    try {
-      const text = await readWithGroq(env, images);
-      if (text) return text;
-    } catch (e) {
-      console.warn('groq vision failed, trying Cloudflare:', e?.message || e);
-    }
+    return readWithGroq(env, images, options);
   }
   const content = [
     { type: 'text', text: READ_PROMPT },
@@ -87,24 +69,29 @@ async function readBatch(env, images) {
 }
 
 // Reads up to 15 images (photos or PDF pages) three at a time, two batches in parallel, keeping page order.
-export async function imagesToText(env, images) {
+export async function imagesToText(env, images, options = {}) {
   const batches = [];
   for (let i = 0; i < images.length; i += 3) batches.push(images.slice(i, i + 3));
   const out = new Array(batches.length).fill('');
+  // One Groq batch at a time: parallel pages share the same platform allowance.
+  if (env.GROQ_API_KEY) {
+    for (let i = 0; i < batches.length; i++) out[i] = await readBatch(env, batches[i], options);
+    return out.filter(Boolean).join('\n\n');
+  }
   let next = 0;
   await Promise.all(
     [0, 1].map(async () => {
       while (next < batches.length) {
         const i = next++;
-        out[i] = await readBatch(env, batches[i]);
+        out[i] = await readBatch(env, batches[i], options);
       }
     }),
   );
   return out.filter(Boolean).join('\n\n');
 }
 
-export async function sourceToText(env, source) {
+export async function sourceToText(env, source, options) {
   if (source?.type === 'pdf') return pdfToText(env, source.data);
-  if (source?.type === 'images') return imagesToText(env, source.images);
+  if (source?.type === 'images') return imagesToText(env, source.images, options);
   return '';
 }

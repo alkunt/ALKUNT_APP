@@ -12,8 +12,8 @@ const json=(data,status=200)=>Response.json(data,{status,headers});
 export function madarIdentity(request){const value=(request.headers.get('cookie')||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return sessionUser(value);}
 function environment(user){
  const env={accountId:user.userId,isOwner:user.email.trim().toLowerCase()===ownerEmail,FREE_POINTS:'200',FREE_MAX_CARDS:'10',MAX_CARDS:'30',GLOBAL_DAILY_CREDITS:'3000',CREDIT_PERIOD:'month'};
- for(const key of ['ANTHROPIC_API_KEY','OPENAI_API_KEY','GROQ_API_KEY','GEMINI_API_KEY','PEXELS_API_KEY','UNSPLASH_ACCESS_KEY','MODEL','OPENAI_MODEL','GROQ_MODEL','GROQ_TPM','GROQ_VISION_MODEL','TEXT_PROVIDER','IMAGE_MODEL'])if(process.env['MADAR_'+key])env[key]=process.env['MADAR_'+key];
- if(!env.GROQ_API_KEY){const provider=configuredProvider();if(provider){env.GROQ_API_KEY=provider.apiKey;env.GROQ_MODEL=provider.model;env.TEXT_PROVIDER='groq';}}
+ for(const key of ['ANTHROPIC_API_KEY','OPENAI_API_KEY','GROQ_API_KEY','GEMINI_API_KEY','GEMINI_TEXT_API_KEY','GEMINI_TEXT_MODEL','PEXELS_API_KEY','UNSPLASH_ACCESS_KEY','MODEL','OPENAI_MODEL','GROQ_MODEL','GROQ_TPM','GROQ_VISION_MODEL','TEXT_PROVIDER','IMAGE_MODEL'])if(process.env['MADAR_'+key])env[key]=process.env['MADAR_'+key];
+ if(!env.GROQ_API_KEY&&!env.GEMINI_TEXT_API_KEY){const provider=configuredProvider();if(provider){env.TEXT_PROVIDER=provider.provider;if(provider.provider==='gemini'){env.GEMINI_TEXT_API_KEY=provider.apiKey;env.GEMINI_TEXT_MODEL=provider.model;}else{env.GROQ_API_KEY=provider.apiKey;env.GROQ_MODEL=provider.model;}}}
  const limiter={async limit({key}){return {success:limit('madar:'+user.userId+':'+key,120)}}};env.AI_LIMITER=limiter;env.PROXY_LIMITER=limiter;return env;
 }
 async function boundedBody(request,maximum=12*1024*1024){

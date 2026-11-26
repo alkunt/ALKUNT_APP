@@ -27,14 +27,15 @@ class HttpError extends Error {
 }
 
 function cfg(env) {
+  const freeGemini = ai.textEngine(env) === 'gemini';
   return {
     // Text: Claude when its key is set, else free Workers AI, else demo content.
     textEngine: ai.textEngine(env),
     demo: ai.textEngine(env) === 'demo',
     maxCards: Math.min(Number(env.MAX_CARDS || 25), 30), // absolute cap; each plan has its own limit
     // Nano Banana (Gemini) when its key is set; otherwise Workers AI unless switched off.
-    imageEngine: env.GEMINI_API_KEY ? 'nano-banana' : env.AI && env.AI_IMAGES !== 'off' ? 'workers-ai' : 'none',
-    aiImages: Boolean(env.GEMINI_API_KEY) || (Boolean(env.AI) && env.AI_IMAGES !== 'off'),
+    imageEngine: freeGemini ? 'none' : env.GEMINI_API_KEY ? 'nano-banana' : env.AI && env.AI_IMAGES !== 'off' ? 'workers-ai' : 'none',
+    aiImages: !freeGemini && (Boolean(env.GEMINI_API_KEY) || (Boolean(env.AI) && env.AI_IMAGES !== 'off')),
   };
 }
 
@@ -163,6 +164,12 @@ function sse(request, run, { onError } = {}) {
 
 // ---------- AI routes ----------
 
+const waitingNotice = send => ({ seconds }) => send('notice', {
+  message: seconds
+    ? `الخدمة مزدحمة مؤقتًا. ننتظر ${seconds} ثانية ثم نكمل طلبك تلقائيًا؛ لا حاجة لإعادة المحاولة.`
+    : 'طلبك في قائمة الانتظار. سيكمل مدار تلقائيًا عند توفر الخدمة.',
+});
+
 // Validates an uploaded PDF or image set. Returns { type, ... } or null when none was sent.
 function cleanSourceFile(file) {
   if (file?.type === 'pdf') {
@@ -220,10 +227,11 @@ async function routeOutline(request, env, who) {
     async (send) => {
       send('credits', { remaining: credit.remaining });
       if (input.truncated) send('notice', { message: 'الصفحة طويلة، فاستخدمنا الجزء الأول منها فقط.' });
-      await readFileForFreeEngine(env, c, input, send);
+      await readFileForFreeEngine(env, c, input, send, request.signal);
       const handlers = {
         onTitle: (t) => send('title', { title: t }),
         onCard: (card) => send('card', card),
+        onWait: waitingNotice(send),
         signal: request.signal,
       };
       const out = c.demo ? await mock.mockOutline(input, handlers) : await ai.outline(env, input, handlers);
@@ -234,13 +242,14 @@ async function routeOutline(request, env, who) {
 }
 
 // The free engine cannot read PDFs or photos directly: turn them into text first (Claude reads them natively).
-async function readFileForFreeEngine(env, c, input, send) {
+async function readFileForFreeEngine(env, c, input, send, signal) {
   if (!ai.textOnlyEngine(env) || !input.source) return;
   send('notice', { message: input.source.type === 'pdf' || input.source.pages ? 'جارٍ قراءة صفحات ملف PDF…' : 'جارٍ قراءة الصور…' });
   let text = '';
   try {
-    text = await sourceToText(env, input.source);
+    text = await sourceToText(env, input.source, { signal, onWait: waitingNotice(send) });
   } catch (e) {
+    if (e instanceof ai.AIError || e?.name === 'AbortError' || e?.name === 'TimeoutError') throw e;
     console.error('file reading failed', e?.code || e?.name || 'provider');
     if (ai.isQuotaError(e)) throw new ai.AIError(ai.QUOTA_MESSAGE, 'quota');
     throw new ai.AIError('تعذّرت قراءة الملف. جرّب ملفاً آخر أو الصق نصه في تبويب «من نص».', 'read');
@@ -303,11 +312,12 @@ async function routeGenerate(request, env, who) {
       const handlers = {
         onTitle: (t) => send('title', { title: t }),
         onCard: (card) => send('card', card),
+        onWait: waitingNotice(send),
         signal: request.signal,
       };
       if (input.sourceFile) {
         const tmp = { source: input.sourceFile, text: '' };
-        await readFileForFreeEngine(env, c, tmp, send);
+        await readFileForFreeEngine(env, c, tmp, send, request.signal);
         input.sourceText = tmp.text;
         input.sourceFile = tmp.source;
       }
@@ -358,6 +368,7 @@ async function routeAssistant(request, env, who) {
       send('credits', { remaining: credit.remaining });
       const handlers = {
         onReply: (t) => send('reply', { reply: t }),
+        onWait: waitingNotice(send),
         onTitle: (t) => send('title', { title: t }),
         onCard: (card) => send('card', card),
         signal: request.signal,

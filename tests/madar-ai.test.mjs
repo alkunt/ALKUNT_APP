@@ -20,7 +20,7 @@ const completed=async response=>{const {events,content}=await readEvents(respons
 const card=(title,layout='bullets')=>({ref:0,layout,title,subtitle:'',body:'شرح عربي واضح يخص هذا العرض.',items:[],image_query:'abstract geometric educational illustration',notes:'ملاحظات المتحدث لهذا العرض.'});
 const outline={title:'إدارة وقت التعلّم',cards:[{title:'هدف واضح',points:['نحدد الأولويات']},{title:'خطة قابلة للتنفيذ',points:['نوزع المهام']},{title:'الخطوات التالية',points:['نراجع النتائج']}],source_notes:''};
 const deck={title:outline.title,cards:outline.cards.map((c,i)=>card(c.title,i===0?'cover':i===2?'closing':'image_text'))};
-let mode='success',calls=[];
+let mode='success',calls=[],recovered=false;
 globalThis.fetch=async(url,options)=>{
  assert.equal(String(url),'https://api.groq.com/openai/v1/chat/completions');
  const body=JSON.parse(options.body);calls.push(body);
@@ -28,6 +28,7 @@ globalThis.fetch=async(url,options)=>{
  assert.ok(options.signal instanceof AbortSignal);
  assert.equal(body.response_format.type,'json_schema');
  assert.ok(body.max_completion_tokens>=700&&body.max_completion_tokens<8000);
+ if(mode==='recoverable'&&!recovered){recovered=true;return Response.json({error:{message:'private-source-and-secret-must-never-be-shown'}},{status:429,headers:{'retry-after':'0.01'}});}
  if(mode==='limited')return Response.json({error:{message:'private-source-and-secret-must-never-be-shown'}},{status:429});
  if(mode==='bad-key')return Response.json({error:{message:'private-source-and-secret-must-never-be-shown'}},{status:401});
  if(mode==='timeout')throw new DOMException('private-source-and-secret-must-never-be-shown','TimeoutError');
@@ -64,6 +65,14 @@ try{
  assert.ok(textCall.messages[0].content.includes('The complete source is retained for the writer'));
  await completed(await request('/api/generate',{method:'POST',body:{outline:textOutline,sourceText:textOutline.sourceText}}));
  assert.ok(calls.at(-1).messages[1].content.includes(source),'The writer also receives the complete original source.');
+ mode='recoverable';const beforeRecovery=(await config()).plan.remaining,recoveryStart=calls.length;
+ const recovery=await readEvents(await request('/api/outline',{method:'POST',body:{mode:'generate',prompt:'فحص استكمال المخطط تلقائيًا بعد الازدحام',cardCount:3}}));
+ assert.ok(recovery.events.some(x=>x.event==='notice'&&x.data.message.includes('تلقائيًا')));
+ assert.ok(recovery.events.some(x=>x.event==='done'));assert.equal(recovery.events.some(x=>x.event==='error'),false);
+ assert.equal(calls.length,recoveryStart+2);assert.deepEqual(calls.at(-1),calls.at(-2));
+ assert.equal((await config()).plan.remaining,beforeRecovery-2,'A recovered request is charged once, not once per provider attempt.');
+ assert.equal(recovery.content.includes('private-source-and-secret'),false);
+ assert.ok(calls.at(-1).max_completion_tokens<=2500,'Small outlines do not reserve the whole minute allowance.');
  for(mode of ['limited','bad-key','timeout','invalid']){
   const before=(await config()).plan.remaining;
   const {content,events}=await readEvents(await request('/api/outline',{method:'POST',body:{mode:'generate',prompt:'فحص تعذر التوليد',cardCount:3}}));
