@@ -1,5 +1,5 @@
 // Exports: PDF (browser print), PowerPoint (editable, mapped from the rendered layout), PNG, JSON.
-import { toast, loadScript } from './ui.js';
+import { toast, loadScript, h, modal } from './ui.js';
 import { FORMATS } from './schema.js';
 import { renderCard, fitCard, isFixed, deckDir } from './render.js';
 import { getTheme } from './themes.js';
@@ -9,13 +9,24 @@ const H2I_URL = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to
 
 const safeName = (s) => (s || 'madar').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'madar';
 
-function download(blob, name) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  document.body.append(a);
-  a.click();
-  setTimeout(() => (URL.revokeObjectURL(a.href), a.remove()), 1500);
+async function download(blob, name) {
+  if (!(blob instanceof Blob) || !blob.size) throw new Error('The export is empty.');
+  // Keep a self-contained file link available until the member closes the dialog.
+  // A completed generation does not tell us whether the browser saved the file.
+  const href = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not prepare the export.'));
+    reader.readAsDataURL(blob);
+  });
+  const link = h('a', { class: 'btn btn-primary', href, download: name }, 'تنزيل الملف');
+  const body = h('div', { style: { display: 'grid', gap: '14px' } },
+    h('strong', { dir: 'auto', style: { overflowWrap: 'anywhere' } }, name),
+    h('p', { class: 'tiny' }, `${Math.max(1, Math.ceil(blob.size / 1024))} كيلوبايت`),
+    h('p', {}, 'ملفك جاهز. اضغط لتنزيله إلى جهازك. يمكنك استخدام الرابط مرة أخرى ما دامت هذه النافذة مفتوحة.'),
+    link);
+  modal('الملف جاهز للتنزيل', body, { width: 540 });
+  link.focus();
 }
 
 function offscreenHost() {
@@ -124,7 +135,7 @@ export async function exportPNG(deck, index = 0) {
     card.querySelectorAll('[data-noexport]').forEach((n) => n.remove());
     const blob = await window.htmlToImage.toBlob(card, { pixelRatio: 2, width: card.offsetWidth, height: card.offsetHeight, cacheBust: false });
     host.remove();
-    download(blob, `${safeName(deck.title)}-${index + 1}.png`);
+    await download(blob, `${safeName(deck.title)}-${index + 1}.png`);
   } catch (e) {
     console.error(e);
     toast('تعذّر تصدير الصورة. جرّب PDF بدلاً منها.', 'error');
@@ -133,9 +144,9 @@ export async function exportPNG(deck, index = 0) {
 
 // ---------- JSON ----------
 
-export function exportJSON(deck) {
+export async function exportJSON(deck) {
   const data = { madar: 1, deck: { ...deck, share: null } };
-  download(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }), `${safeName(deck.title)}.madar.json`);
+  await download(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }), `${safeName(deck.title)}.madar.json`);
 }
 
 // ---------- PowerPoint ----------
@@ -329,8 +340,10 @@ export async function exportPPTX(deck) {
       if (xdeck.cards[i].notes) slide.addNotes(xdeck.cards[i].notes);
     }
     host.remove();
-    await pptx.writeFile({ fileName: `${safeName(deck.title)}.pptx` });
-    toast('تم تنزيل ملف PowerPoint. إن لم تكن الخطوط العربية مثبّتة لديك، سيستبدلها PowerPoint بخط مشابه.', 'ok', 6500);
+    const archive = await pptx.write({ outputType: 'blob' });
+    const blob = new Blob([archive], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+    await download(blob, `${safeName(deck.title)}.pptx`);
+    toast('ملف PowerPoint جاهز. إذا لم تكن الخطوط العربية مثبّتة لديك، فقد يستبدلها PowerPoint بخط مشابه.', 'ok', 6500);
   } catch (e) {
     console.error(e);
     toast('تعذّر إنشاء ملف PowerPoint. حاول مرة أخرى أو صدّر PDF.', 'error');
