@@ -3,6 +3,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {cookieName,sessionUser,originAllowed,limit,ownerEmail} from '../auth.mjs';
 import worker from './src/worker.js';
+import {configuredProvider,providerStatus,saveProvider} from './provider-settings.mjs';
 const assets=path.resolve(process.cwd(),'server/madar/public');
 const headers={'Cache-Control':'private, no-store, max-age=0','Pragma':'no-cache','Vary':'Cookie','X-Content-Type-Options':'nosniff','X-Frame-Options':'SAMEORIGIN','Referrer-Policy':'same-origin','X-Robots-Tag':'noindex, nofollow'};
 const csp="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com; worker-src 'self' blob: https://cdn.jsdelivr.net; frame-src 'self' blob:; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'";
@@ -12,10 +13,11 @@ export function madarIdentity(request){const value=(request.headers.get('cookie'
 function environment(user){
  const env={accountId:user.userId,isOwner:user.email.trim().toLowerCase()===ownerEmail,FREE_POINTS:'200',FREE_MAX_CARDS:'10',MAX_CARDS:'30',GLOBAL_DAILY_CREDITS:'3000',CREDIT_PERIOD:'month'};
  for(const key of ['ANTHROPIC_API_KEY','OPENAI_API_KEY','GROQ_API_KEY','GEMINI_API_KEY','PEXELS_API_KEY','UNSPLASH_ACCESS_KEY','MODEL','OPENAI_MODEL','GROQ_MODEL','GROQ_TPM','GROQ_VISION_MODEL','TEXT_PROVIDER','IMAGE_MODEL'])if(process.env['MADAR_'+key])env[key]=process.env['MADAR_'+key];
+ if(!env.GROQ_API_KEY){const provider=configuredProvider();if(provider){env.GROQ_API_KEY=provider.apiKey;env.GROQ_MODEL=provider.model;env.TEXT_PROVIDER='groq';}}
  const limiter={async limit({key}){return {success:limit('madar:'+user.userId+':'+key,120)}}};env.AI_LIMITER=limiter;env.PROXY_LIMITER=limiter;return env;
 }
-async function boundedBody(request){
- const maximum=12*1024*1024;if(Number(request.headers.get('content-length')||0)>maximum)throw new Error('SIZE');const reader=request.body?.getReader();if(!reader)return null;const chunks=[];let total=0;
+async function boundedBody(request,maximum=12*1024*1024){
+ if(Number(request.headers.get('content-length')||0)>maximum)throw new Error('SIZE');const reader=request.body?.getReader();if(!reader)return null;const chunks=[];let total=0;
  for(;;){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>maximum){await reader.cancel();throw new Error('SIZE')}chunks.push(value)}return Buffer.concat(chunks,total);
 }
 export async function handleMadar(request){
@@ -29,13 +31,22 @@ export async function handleMadar(request){
    const scope=createHash('sha256').update(user.userId).digest('hex').slice(0,24);
    const expectedScope=request.headers.get('x-madar-account');
    if(expectedScope&&expectedScope!==scope)return json({error:'تغير الحساب. أعد فتح مدار لحماية أعمالك.',code:'account_changed'},401);
+   if(route==='/api/owner/provider'){
+    if(user.email.trim().toLowerCase()!==ownerEmail)return json({error:'غير متاح.'},403);
+    if(request.method==='GET')return json(providerStatus());
+    if(request.method!=='POST')return json({error:'طريقة غير مدعومة.'},405);
+    if(!limit('madar:provider:'+user.userId,6))return json({error:'محاولات كثيرة. انتظر دقيقة ثم أعد المحاولة.'},429);
+    let payload;try{payload=JSON.parse((await boundedBody(request,2048))?.toString()||'{}');}catch(e){if(e.message==='SIZE')throw e;return json({error:'طلب غير صالح.'},400);}
+    if(!payload||typeof payload!=='object'||Array.isArray(payload))return json({error:'طلب غير صالح.'},400);
+    try{return json(await saveProvider(payload,user.userId,request.signal,()=>madarIdentity(request)?.userId===user.userId));}catch(e){if(e.code==='provider_setup')return json({error:e.message},400);throw e;}
+   }
    if(route.startsWith('/api/admin')||route==='/api/redeem')return json({error:'غير متاح.'},404);
    if(request.method==='HEAD')return new Response(null,{status:405,headers});
    if(!['GET','HEAD'].includes(request.method)&&!limit('madar:write:'+user.userId,120))return json({error:'طلبات كثيرة. انتظر قليلًا ثم أعد المحاولة.'},429);
    const body=['GET','HEAD'].includes(request.method)?null:await boundedBody(request),upstream=new URL(url);upstream.pathname=route;
    const forwarded=new Request(upstream,{method:request.method,headers:request.headers,body,signal:request.signal});
    const result=await worker.fetch(forwarded,environment(user),{waitUntil(promise){Promise.resolve(promise).catch(()=>{})}});
-   if(route==='/api/config'&&result.ok){const config=await result.json();config.userScope=scope;config.billingEnabled=false;config.accountRequired=true;config.worksPrivate=true;config.sharing='owner-only';return json(config)}
+   if(route==='/api/config'&&result.ok){const config=await result.json();config.userScope=scope;config.billingEnabled=false;config.accountRequired=true;config.worksPrivate=true;config.sharing='owner-only';config.providerAdmin=user.email.trim().toLowerCase()===ownerEmail;return json(config)}
    const response=new Response(result.body,{status:result.status,headers:result.headers});for(const [key,value] of Object.entries(headers))response.headers.set(key,value);response.headers.set('X-Madar-Account',scope);response.headers.delete('Access-Control-Allow-Origin');return response;
   }
   if(!['GET','HEAD'].includes(request.method))return json({error:'طريقة غير مدعومة.'},405);
