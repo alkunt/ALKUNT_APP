@@ -1,0 +1,10 @@
+import {handleMadar} from '../../../server/madar/bridge.mjs';
+export const runtime='nodejs';
+export const dynamic='force-dynamic';
+export const revalidate=0;
+export const GET=handleMadar;
+export const HEAD=handleMadar;
+export const POST=handleMadar;
+export const PUT=handleMadar;
+export const DELETE=handleMadar;
+export const OPTIONS=handleMadar;
