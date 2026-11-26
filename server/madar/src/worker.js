@@ -123,6 +123,7 @@ function aiErrorMessage(e) {
   if (e instanceof Anthropic.BadRequestError) return 'تعذّر تنفيذ الطلب. جرّب نصاً أقصر أو إعدادات أخرى.';
   if (e instanceof Anthropic.APIError) return 'حدث خطأ في خدمة الذكاء الاصطناعي. حاول مرة أخرى.';
   if (e?.name === 'AbortError') return 'أُلغي الطلب.';
+  if (e?.name === 'TimeoutError') return 'استغرق التوليد وقتًا أطول من المتوقع. أعد المحاولة؛ لم تُخصم نقاط العملية الفاشلة.';
   return 'حدث خطأ غير متوقع. حاول مرة أخرى.';
 }
 
@@ -142,7 +143,7 @@ function sse(request, run, { onError } = {}) {
       const final = await run(send);
       send('done', final);
     } catch (e) {
-      if (e?.name !== 'AbortError') console.error('stream failed', e?.message || e);
+      if (e?.name !== 'AbortError') console.error('stream failed', e?.code || e?.name || 'provider');
       await onError?.(e);
       send('error', { error: aiErrorMessage(e) });
     } finally {
@@ -240,7 +241,7 @@ async function readFileForFreeEngine(env, c, input, send) {
   try {
     text = await sourceToText(env, input.source);
   } catch (e) {
-    console.error('file reading failed', e?.message || e);
+    console.error('file reading failed', e?.code || e?.name || 'provider');
     if (ai.isQuotaError(e)) throw new ai.AIError(ai.QUOTA_MESSAGE, 'quota');
     throw new ai.AIError('تعذّرت قراءة الملف. جرّب ملفاً آخر أو الصق نصه في تبويب «من نص».', 'read');
   }
@@ -388,7 +389,7 @@ async function routeCard(request, env, who) {
   } catch (e) {
     await credit.refund();
     await noteQuota(env, e);
-    console.error('card edit failed', e?.message || e);
+    console.error('card edit failed', e?.code || e?.name || 'provider');
     throw new HttpError(aiErrorMessage(e), 502);
   }
 }
@@ -497,12 +498,8 @@ async function routeUpload(request, env, who) {
   return json({ url: `/madar/api/img/${id}` });
 }
 
-// Images never change, so each is read from the database once and then served from Cloudflare's cache.
+// Authorize every image read. A URL or a previous cache entry never grants access.
 async function routeImg(request, env, ctx, id) {
-  const cache = globalThis.caches?.default;
-  const key = new Request(new URL(`/madar/api/img/${id}`, request.url).toString());
-  const hit = await cache?.match(key).catch(() => null);
-  if (hit) return hit;
   const row = await store.getImage(env, id);
   if (!row) return new Response('not found', { status: 404 });
   let bytes;
@@ -513,9 +510,8 @@ async function routeImg(request, env, ctx, id) {
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   }
   const res = new Response(bytes, {
-    headers: { 'Content-Type': row.mime, 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' },
+    headers: { 'Content-Type': row.mime, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' },
   });
-  if (cache) ctx.waitUntil(cache.put(key, res.clone()).catch(() => {}));
   return res;
 }
 
@@ -543,7 +539,7 @@ async function routeDecks(request, env, url, who) {
   }
   if (id && request.method === 'GET') {
     const got = await store.getDeck(env, id, { countView: url.searchParams.get('view') === '1' });
-    return got ? json(got) : fail('العرض غير موجود أو أُلغي نشره.', 404);
+    return got ? json(got) : fail('العرض غير موجود في حسابك أو حُذفت نسخته المحفوظة.', 404);
   }
   if (id && request.method === 'PUT') {
     const body = await readJSON(request, 2 * 1024 * 1024);

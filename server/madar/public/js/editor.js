@@ -142,7 +142,7 @@ export function mountEditor(root, deckId) {
     button('الثيم', { icon: 'palette', onClick: () => togglePanel('themes') }),
     button('المساعد', { disabled:config.demo, title:config.demo?'المساعد الذكي غير مفعّل':null, icon: 'wand-sparkles', cls: 'ai-btn', onClick: () => togglePanel('assistant') }),
     exportBtn,
-    button('مشاركة', { icon: 'share-2', onClick: () => !generating && openShare(deck, { onChange: save }) }),
+    button('حفظ ورابط', { icon: 'lock', onClick: () => !generating && openShare(deck, { onChange: save }) }),
     button('اعرض', { icon: 'play', kind: 'primary', onClick: () => !generating && startPresent(deck, active) }),
   );
 

@@ -24,6 +24,10 @@ try{
  assert.equal((await request('/api/config',{headers:{cookie:cookieName+'=invalid'}})).status,401);
  assert.equal((await request('/api/config',{user:'blocked'})).status,401);
  const a=await json(await request('/api/config',{user:'alice'})),b=await json(await request('/api/config',{user:'bob'}));assert.equal(a.status,200);assert.notEqual(a.data.userScope,b.data.userScope);assert.equal(a.data.demo,true);assert.equal(a.data.billingEnabled,false);
+ assert.equal(a.data.worksPrivate,true);assert.equal(a.data.sharing,'owner-only');
+ assert.equal((await request('/api/config',{user:'bob',headers:{'x-madar-account':a.data.userScope}})).status,401);
+ assert.equal((await request('/api/decks',{user:'bob',method:'POST',headers:{'x-madar-account':a.data.userScope},body:{deck:{title:'stale-account-data',cards:[{title:'secret'}]}}})).status,401);
+ assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM madar_decks').get().n,0);
  const shell=await request('/',{user:'alice'});assert.match(await shell.text(),new RegExp('data-madar-account="'+a.data.userScope+'"'));assert.match(shell.headers.get('content-security-policy'),/frame-ancestors 'self'/);
  assert.equal((await request('/js/app.js',{user:'alice'})).status,200);
  assert.equal((await request('/bridge.mjs',{user:'alice'})).status,404);
@@ -40,7 +44,16 @@ try{
  assert.equal((await request(image,{user:'bob'})).status,404);assert.equal((await request(image,{user:'alice'})).status,200);
  const deck={title:'عرض للاختبار',cards:[{title:'التعلم النشط',layout:'cover',image:{url:'/madar'+image}}]};
  const published=await json(await request('/api/decks',{user:'alice',method:'POST',body:{deck}}));assert.equal(published.status,201);const {id,editKey}=published.data;
- assert.equal((await request('/api/decks/'+id)).status,401);assert.equal((await request('/api/decks/'+id,{user:'bob'})).status,200);assert.equal((await request(image,{user:'bob'})).status,200);
+ assert.equal((await request('/api/decks/'+id)).status,401);
+ assert.equal((await request('/api/decks/'+id,{user:'alice'})).status,200);
+ const privateDeck=await request('/api/decks/'+id+'?view=1',{user:'bob'});assert.equal(privateDeck.status,404);assert.equal((await privateDeck.text()).includes('التعلم النشط'),false);
+ assert.equal(sql.prepare('SELECT views FROM madar_decks WHERE id=?').get(id).views,0);
+ const originalCaches=globalThis.caches;
+ globalThis.caches={default:{match:async()=>new Response(png,{headers:{'content-type':'image/png'}}),put:async()=>{throw new Error('Private images must not enter a shared cache')}}};
+ try{assert.equal((await request(image,{user:'bob'})).status,404);assert.equal((await request(image,{user:'alice'})).status,200);}finally{if(originalCaches===undefined)delete globalThis.caches;else globalThis.caches=originalCaches;}
+ const bobDeck=await json(await request('/api/decks',{user:'bob',method:'POST',body:{deck:{title:'Bob private',cards:[{title:'Bob secret'}]}}}));
+ assert.equal((await request('/api/decks/'+bobDeck.data.id,{user:'alice'})).status,404);
+ assert.equal((await request('/api/decks/'+bobDeck.data.id,{user:'bob'})).status,200);
  for(const method of ['PUT','DELETE'])assert.equal((await request('/api/decks/'+id,{user:'bob',method,body:{editKey,deck}})).status,403);
  assert.equal((await request('/api/decks/'+id,{user:'alice',method:'PUT',body:{editKey,deck:{...deck,title:'تحديث'}}})).status,200);
  assert.equal((await request('/api/decks/'+id,{user:'alice',method:'DELETE',body:{editKey}})).status,200);assert.equal((await request(image,{user:'bob'})).status,404);
@@ -51,5 +64,5 @@ try{
  for(const ip of ['127.0.0.1','10.0.0.1','172.16.1.1','192.168.1.1','100.64.0.1','::1','::ffff:127.0.0.1','fc00::1','fe80::1','2001:db8::1'])assert.equal(publicAddress(ip),false,ip);
  assert.equal(publicAddress('8.8.8.8'),true);await assert.rejects(()=>safeFetch('http://127.0.0.1'));
  const page=pageText('<title>عنوان &amp; نص</title><body><nav>DROP</nav><p>محتوى الصفحة</p><script>SECRET</script><p>&#x110000; نص ثان</p></body>');assert.equal(page.title,'عنوان & نص');assert.ok(page.text.includes('محتوى الصفحة'));assert.equal(/SECRET|DROP|<script>/.test(page.text),false);
- console.log('PASS: Madar server authentication, expired/blocked sessions, private assets, CSRF, account separation, member sharing, image ownership, upload validation, body/rate limits, local templates and SSRF restrictions.');
+ console.log('PASS: Madar server authentication, expired/blocked sessions, private assets, CSRF, stale-account rejection, owner-only decks and images, shared-cache bypass protection, upload validation, body/rate limits, local templates and SSRF restrictions.');
 }finally{sql.close();assert.ok(path.resolve(directory).startsWith(path.resolve(tmpdir())+path.sep));rmSync(directory,{recursive:true,force:true})}

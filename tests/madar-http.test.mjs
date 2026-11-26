@@ -11,6 +11,7 @@ const {sql}=await import('../server/runtime.mjs');
 const {passwordHash}=await import('../server/auth.mjs');
 const password='Local-fixture-only-2026!';
 sql.prepare('INSERT INTO accounts VALUES(?,?,?,?)').run('madar-http','madar-http@example.test','Local fixture',await passwordHash(password));
+sql.prepare('INSERT INTO accounts VALUES(?,?,?,?)').run('madar-bob','madar-bob@example.test','Second local fixture',await passwordHash(password));
 const child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','31872'],{env:process.env,stdio:['ignore','pipe','pipe']});let logs='';child.stdout.on('data',d=>logs+=d);child.stderr.on('data',d=>logs+=d);
 try{
  let ready=false;for(let i=0;i<100;i++){try{if((await fetch(origin)).ok){ready=true;break}}catch{}await new Promise(r=>setTimeout(r,100))}assert.ok(ready,logs);
@@ -19,11 +20,17 @@ try{
  const guest=await (await fetch(origin+'/?view=madar')).text();assert.ok(guest.includes('مدار'));
  const login=await fetch(origin+'/api/auth',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({action:'login',email:'madar-http@example.test',password})});assert.equal(login.status,200);const cookie=login.headers.get('set-cookie').split(';')[0];
  const config=await fetch(origin+'/madar/api/config',{headers:{cookie}});assert.equal(config.status,200);assert.match(config.headers.get('cache-control'),/no-store/);const c=await config.json();assert.equal(c.accountRequired,true);
+ assert.equal(c.worksPrivate,true);assert.equal(c.sharing,'owner-only');
+ const otherLogin=await fetch(origin+'/api/auth',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({action:'login',email:'madar-bob@example.test',password})});assert.equal(otherLogin.status,200);const otherCookie=otherLogin.headers.get('set-cookie').split(';')[0];
+ const saved=await fetch(origin+'/madar/api/decks',{method:'POST',headers:{cookie,origin,'content-type':'application/json','x-madar-account':c.userScope},body:JSON.stringify({deck:{title:'Private HTTP fixture',cards:[{title:'private HTTP card'}]}})});assert.equal(saved.status,201);const savedId=(await saved.json()).id;
+ assert.equal((await fetch(origin+'/madar/api/decks/'+savedId,{headers:{cookie}})).status,200);
+ const denied=await fetch(origin+'/madar/api/decks/'+savedId,{headers:{cookie:otherCookie}});assert.equal(denied.status,404);assert.equal((await denied.text()).includes('private HTTP card'),false);
+ assert.equal((await fetch(origin+'/madar/api/config',{headers:{cookie:otherCookie,'x-madar-account':c.userScope}})).status,401);
  const html=await fetch(origin+'/madar/',{headers:{cookie}});assert.equal(html.status,200);assert.match(await html.text(),new RegExp('data-madar-account="'+c.userScope+'"'));assert.match(html.headers.get('content-security-policy'),/frame-ancestors 'self'/);
  const js=await fetch(origin+'/madar/js/app.js',{headers:{cookie}});assert.equal(js.status,200);assert.match(js.headers.get('content-type'),/javascript/);assert.ok((await js.text()).includes('/madar'));
  assert.equal((await fetch(origin+'/madar/src/worker.js',{headers:{cookie}})).status,404);
  assert.equal((await fetch(origin+'/madar/api/outline',{method:'POST',headers:{cookie,origin:'https://evil.test','content-type':'application/json'},body:'{}'})).status,403);
  const outline=await fetch(origin+'/madar/api/outline',{method:'POST',headers:{cookie,origin,'content-type':'application/json'},body:JSON.stringify({mode:'generate',prompt:'التعلم النشط',cardCount:3})});assert.equal(outline.status,200);assert.match(await outline.text(),/event: done/);
  await fetch(origin+'/api/auth',{method:'POST',headers:{cookie,origin,'content-type':'application/json'},body:JSON.stringify({action:'logout'})});assert.equal((await fetch(origin+'/madar/api/config',{headers:{cookie}})).status,401);assert.equal((await fetch(origin+'/madar/js/app.js',{headers:{cookie}})).status,401);
- console.log('PASS: production HTTP Madar gate, login, real route/asset delivery, private headers, origin rejection, template stream and logout revocation.');
+ console.log('PASS: production HTTP Madar gate, two-account isolation, stale-account rejection, login, real route/asset delivery, private headers, origin rejection, template stream and logout revocation.');
 }finally{child.kill('SIGTERM');await new Promise(resolve=>child.once('exit',resolve));sql.close();assert.ok(path.resolve(directory).startsWith(path.resolve(tmpdir())+path.sep));rmSync(directory,{recursive:true,force:true})}

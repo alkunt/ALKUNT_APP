@@ -1,4 +1,4 @@
-// Publishing a deck to a public link, and the public view / embed pages.
+// A saved account-only copy. Knowing its link never grants another account access.
 import { h, icon, button, toast, modal, copyText, uid } from './ui.js';
 import { request } from './api.js';
 import { state, BRAND } from './state.js';
@@ -18,28 +18,27 @@ function publicCopy(deck) {
 
 export function openShare(deck, { onChange } = {}) {
   const body = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } });
-  const m = modal('مشاركة العرض', body, { width: 600 });
+  const m = modal('رابط خاص بحسابك', body, { width: 600 });
 
   function draw() {
     body.replaceChildren();
     if (!deck.share?.id) {
       body.append(
-        h('p', { class: 'muted' }, 'انشر العرض لتحصل على رابط يستطيع أعضاء الكونت المسجلون فتحه ومشاهدته (دون تعديل). يمكنك إلغاء النشر في أي وقت.'),
-        h('div', { class: 'row', style: { justifyContent: 'flex-end' } }, button('انشر واحصل على الرابط', { kind: 'primary', icon: 'globe', onClick: publish })),
+        h('p', { class: 'muted' }, 'احفظ نسخة خاصة لفتح العرض برابط من حسابك نفسه. العروض والصور لا تظهر لأي حساب آخر، حتى لو وصل إليه الرابط. لمشاركة ملف خارج حسابك، استخدم التصدير.'),
+        h('div', { class: 'row', style: { justifyContent: 'flex-end' } }, button('حفظ نسخة خاصة', { kind: 'primary', icon: 'lock', onClick: publish })),
       );
       return;
     }
     const link = `${location.origin}/madar/d/${deck.share.id}`;
-    const embed = `<iframe src="${link}?embed=1" width="100%" style="aspect-ratio:16/9;border:0;border-radius:12px" allow="fullscreen" loading="lazy" title="${deck.title.replace(/"/g, '&quot;')}"></iframe>`;
     body.append(
-      h('label', { class: 'lbl' }, 'رابط المشاهدة', h('div', { class: 'copy-row' }, h('input', { class: 'field', readonly: true, value: link, onFocus: (e) => e.target.select() }), button('نسخ', { kind: 'soft', icon: 'copy', onClick: () => copyText(link) }))),
-      h('label', { class: 'lbl' }, 'كود تضمين لأعضاء الكونت', h('div', { class: 'copy-row' }, h('input', { class: 'field', readonly: true, value: embed, onFocus: (e) => e.target.select() }), button('نسخ', { kind: 'soft', icon: 'code', onClick: () => copyText(embed) }))),
-      h('p', { class: 'tiny' }, deck.share.updatedAt && (deck.updatedAt || 0) - deck.share.updatedAt > 3000 ?'لديك تعديلات لم تُنشر بعد.' : 'النسخة المنشورة محدّثة.'),
+      h('label', { class: 'lbl' }, 'الرابط الخاص', h('div', { class: 'copy-row' }, h('input', { class: 'field', readonly: true, value: link, onFocus: (e) => e.target.select() }), button('نسخ', { kind: 'soft', icon: 'copy', onClick: () => copyText(link) }))),
+      h('p', { class: 'muted' }, 'هذا الرابط يفتح بحسابك فقط. لا يمنح أي مستخدم آخر صلاحية عرض أعمالك أو صورك.'),
+      h('p', { class: 'tiny' }, deck.share.updatedAt && (deck.updatedAt || 0) - deck.share.updatedAt > 3000 ?'لديك تعديلات لم تُحفظ في هذه النسخة.' : 'النسخة الخاصة محدّثة.'),
       h(
         'div',
         { class: 'row', style: { justifyContent: 'space-between' } },
-        button('إلغاء النشر', { cls: 'btn-danger', icon: 'trash-2', onClick: unpublish }),
-        h('div', { class: 'row' }, button('فتح', { kind: 'soft', icon: 'external-link', onClick: () => window.open(link, '_blank', 'noopener') }), button('تحديث النسخة المنشورة', { kind: 'primary', icon: 'refresh-cw', onClick: update })),
+        button('حذف النسخة المحفوظة', { cls: 'btn-danger', icon: 'trash-2', onClick: unpublish }),
+        h('div', { class: 'row' }, button('فتح', { kind: 'soft', icon: 'external-link', onClick: () => window.open(link, '_blank', 'noopener') }), button('تحديث النسخة الخاصة', { kind: 'primary', icon: 'refresh-cw', onClick: update })),
       ),
     );
   }
@@ -50,7 +49,7 @@ export function openShare(deck, { onChange } = {}) {
       deck.share = { id: r.id, editKey: r.editKey, updatedAt: Date.now() };
       onChange?.();
       draw();
-      toast('تم النشر! انسخ الرابط وشاركه.', 'ok');
+      toast('حُفظت نسخة خاصة بحسابك.', 'ok');
     } catch (e) {
       toast(e.message, 'error');
     }
@@ -61,19 +60,19 @@ export function openShare(deck, { onChange } = {}) {
       deck.share.updatedAt = Date.now();
       onChange?.();
       draw();
-      toast('تم تحديث النسخة المنشورة.', 'ok');
+      toast('تم تحديث النسخة الخاصة.', 'ok');
     } catch (e) {
       toast(e.message, 'error');
     }
   }
   async function unpublish() {
-    if (!confirm('إلغاء النشر؟ سيتوقف الرابط عن العمل لكل من لديه.')) return;
+    if (!confirm('حذف النسخة المحفوظة وتعطيل رابطها؟ تبقى مسودة العرض في هذا المتصفح.')) return;
     try {
       await request('DELETE', `/madar/api/decks/${deck.share.id}`, { editKey: deck.share.editKey });
       deck.share = null;
       onChange?.();
       draw();
-      toast('أُلغي النشر.', 'ok');
+      toast('حُذفت النسخة المحفوظة.', 'ok');
     } catch (e) {
       toast(e.message, 'error');
     }
