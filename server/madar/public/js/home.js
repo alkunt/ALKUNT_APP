@@ -8,6 +8,7 @@ import { listDecks, deleteDeck, loadDeck, saveDeck, getPref, setPref } from './s
 import { renderCard, scaled } from './render.js';
 import { logoElement } from './logo.js';
 import { uid } from './ui.js';
+import { openProviderSettings } from './provider-settings.js';
 
 const EXAMPLES = [
   'خطة تسويق لمقهى مختص في الكويت',
@@ -52,7 +53,7 @@ export function mountHome(root) {
   const persist = () =>
     setPref('create', { format: f.format, lang: f.lang, density: f.density, imageSource: f.imageSource, imageStyle: f.imageStyle, tone: f.tone, cardCount: f.cardCount });
 
-  const topbar = h('header', { class: 'topbar' }, brandLink(), h('div', { class: 'spacer' }), demoPill(), creditsPill());
+  const topbar = h('header', { class: 'topbar' }, brandLink(), h('div', { class: 'spacer' }), config.providerAdmin?button('ربط المولد',{icon:'settings',onClick:openProviderSettings}):null, demoPill(), creditsPill());
 
   // ----- mode tabs -----
   const tabs = h('div', { class: 'seg', role: 'tablist' });
