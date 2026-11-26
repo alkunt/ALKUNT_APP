@@ -22,6 +22,16 @@ export async function pruneUsage(){await ensureSchema();const date=new Date().to
 export async function createDeck(env,deck){await ensureSchema();const id=newId(16),editKey=newId(40),hash=await sha256(editKey),now=Date.now();if(sql.prepare('SELECT COUNT(*) AS n FROM madar_decks WHERE owner=?').get(env.accountId).n>=100)throw Object.assign(new Error('وصلت إلى حد العروض المنشورة لحسابك.'),{code:'madar_storage_limit'});const data=deckQuota(env,deck);sql.prepare('INSERT INTO madar_decks(id,owner,edit_hash,title,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run(id,env.accountId,hash,String(deck.title||'').slice(0,200),data,now,now);return {id,editKey};}
 export async function updateDeck(env,id,editKey,deck){await ensureSchema();const hash=await sha256(editKey||'');if(!sql.prepare('SELECT id FROM madar_decks WHERE id=? AND owner=? AND edit_hash=?').get(id,env.accountId,hash))return false;const data=deckQuota(env,deck,id);return sql.prepare('UPDATE madar_decks SET data=?,title=?,updated_at=? WHERE id=? AND owner=? AND edit_hash=?').run(data,String(deck.title||'').slice(0,200),Date.now(),id,env.accountId,hash).changes>0;}
 export async function deleteDeck(env,id,editKey){await ensureSchema();return sql.prepare('DELETE FROM madar_decks WHERE id=? AND owner=? AND edit_hash=?').run(id,env.accountId,await sha256(editKey||'')).changes>0;}
-export async function getDeck(env,id,{countView=false}={}){await ensureSchema();const row=sql.prepare('SELECT data,views,title FROM madar_decks WHERE id=?').get(id);if(!row)return null;if(countView)sql.prepare('UPDATE madar_decks SET views=views+1 WHERE id=?').run(id);return {deck:JSON.parse(row.data),views:row.views+(countView?1:0),title:row.title};}
+export async function getDeck(env,id,{countView=false}={}){
+ await ensureSchema();
+ const row=sql.prepare('SELECT data,views,title FROM madar_decks WHERE id=? AND owner=?').get(id,env.accountId);
+ if(!row)return null;
+ if(countView)sql.prepare('UPDATE madar_decks SET views=views+1 WHERE id=? AND owner=?').run(id,env.accountId);
+ return {deck:JSON.parse(row.data),views:row.views+(countView?1:0),title:row.title};
+}
 export async function saveImage(env,mime,data){await ensureSchema();const perUser=sql.prepare('SELECT COALESCE(SUM(length(data)),0) AS n FROM madar_images WHERE owner=?').get(env.accountId).n,total=sql.prepare('SELECT COALESCE(SUM(length(data)),0) AS n FROM madar_images').get().n;if(perUser+data.length>32*1024*1024||total+data.length>180*1024*1024)throw new Error('Image storage limit');const id=newId(20);sql.prepare('INSERT INTO madar_images VALUES(?,?,?,?,?)').run(id,env.accountId,mime,data,Date.now());return id;}
-export async function getImage(env,id){await ensureSchema();const row=sql.prepare('SELECT owner,mime,data FROM madar_images WHERE id=?').get(id);if(!row)return null;if(row.owner!==env.accountId){const link='/madar/api/img/'+id;const shared=sql.prepare('SELECT data FROM madar_decks WHERE owner=?').all(row.owner).some(d=>JSON.stringify(JSON.parse(d.data)).includes(link));if(!shared)return null;}return {mime:row.mime,data:row.data};}
+export async function getImage(env,id){
+ await ensureSchema();
+ const row=sql.prepare('SELECT mime,data FROM madar_images WHERE id=? AND owner=?').get(id,env.accountId);
+ return row?{mime:row.mime,data:row.data}:null;
+}

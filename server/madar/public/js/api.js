@@ -12,7 +12,8 @@ export const config = {
 };
 
 // ---------- device id: issued and signed by the server, kept in this browser ----------
-const headers = (extra = {}) => extra;
+const accountScope = document.documentElement.dataset.madarAccount;
+const headers = (extra = {}) => ({ ...extra, 'X-Madar-Account': accountScope });
 
 export const deviceHeaders = headers;
 
@@ -45,7 +46,7 @@ export function setPlan(plan) {
   listeners.forEach((fn) => fn(plan.remaining));
 }
 
-export function authRequired() { document.getElementById('app')?.replaceChildren(); if(window.parent !== window) window.parent.postMessage({type:'madar:auth-required'}, location.origin); else location.assign('/signin-with-chatgpt?return_to='+encodeURIComponent(location.pathname+location.search)); }
+export function authRequired() { document.body.replaceChildren(); if(window.parent !== window) window.parent.postMessage({type:'madar:auth-required'}, location.origin); else location.assign('/signin-with-chatgpt?return_to='+encodeURIComponent(location.pathname+location.search)); }
 export async function checkSession() { try { const r=await fetch('/madar/api/config',{cache:'no-store'}); if(r.status===401)return authRequired(); if(r.ok){const c=await r.json(); if(c.userScope!==document.documentElement.dataset.madarAccount)authRequired();} } catch {} }
 export async function loadConfig() { const r=await fetch('/madar/api/config',{cache:'no-store'}); if(r.status===401){authRequired();throw new Error('سجّل الدخول لفتح مدار.');} if(!r.ok)throw new Error('تعذّر فتح الاستوديو. أعد تحميل الصفحة.');const data=await r.json();if(data.userScope!==document.documentElement.dataset.madarAccount){authRequired();throw new Error('تغير الحساب. أعد فتح مدار.');}Object.assign(config,data);setRemaining(config.plan.remaining);return config; }
 
