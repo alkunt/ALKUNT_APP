@@ -1,6 +1,6 @@
 import {sql} from '../../runtime.mjs';
 import * as store from './store.js';
-const demo=env=>!env.ANTHROPIC_API_KEY&&!env.OPENAI_API_KEY&&!env.GROQ_API_KEY;
+const demo=env=>!env.ANTHROPIC_API_KEY&&!env.OPENAI_API_KEY&&!env.GROQ_API_KEY&&!env.GEMINI_TEXT_API_KEY;
 export function planCfg(env){const free={id:'free',name:'المجانية',price:'مجانًا',points:Number(env.FREE_POINTS)||200,maxCards:10};return {free,paid:free,pro:free,period:'month',purchaseUrl:'',globalDaily:3000};}
 export async function readDevice(request,env){return env.accountId;}
 export async function issueDevice(env){return {id:env.accountId,token:null};}

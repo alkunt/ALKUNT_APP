@@ -845,6 +845,7 @@ export function mountEditor(root, deckId) {
           },
           {
             reply: ({ reply }) => (pending.lastChild.textContent = reply),
+            notice: ({ message }) => (pending.lastChild.textContent = message),
             card: () => (pending.lastChild.textContent = `يحدّث البطاقات… ${++got}`),
           },
         );
@@ -1047,6 +1048,7 @@ export function mountEditor(root, deckId) {
           turnstile: await turnstileToken(),
         },
         {
+          notice: ({ message }) => { banner.querySelector('.grow').textContent = message; },
           card: (c) => {
             apply(c, k++);
             setBanner(k);
