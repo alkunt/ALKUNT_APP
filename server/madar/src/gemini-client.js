@@ -6,13 +6,30 @@ export const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemi
 export const GEMINI_MODEL = GEMINI_MODELS[0];
 export const geminiModel = model => GEMINI_MODELS.includes(model) ? model : null;
 
-export function geminiRetrySeconds(response, data) {
+// Large enum grammars inside nested card/item arrays can exceed Gemini's
+// constrained-decoding state limit. Keep the JSON structure, guide icon choices
+// with a description, and retain the application's strict icon normalization.
+export function geminiResponseSchema(schema) {
+  if (Array.isArray(schema)) return schema.map(geminiResponseSchema);
+  if (!schema || typeof schema !== 'object') return schema;
+  const result = Object.fromEntries(Object.entries(schema).map(([key, value]) => [key, geminiResponseSchema(value)]));
+  if (schema.enum?.length > 32) {
+    delete result.enum;
+    result.description = [schema.description, 'Choose one of: ' + schema.enum.join(', ')].filter(Boolean).join(' ');
+  }
+  return result;
+}
+
+export function geminiRetrySeconds(response, data, attempt = 0) {
   const details = data?.error?.details || [];
   if (details.some(item => item.violations?.some(v => /PerDay|daily/i.test(v.quotaId || '')))) return null;
   const header = response.headers.get('retry-after');
   const info = details.find(item => item['@type']?.endsWith('google.rpc.RetryInfo'));
-  const value = header ?? String(info?.retryDelay || '').replace(/s$/, '');
-  const delay = value !== '' ? Number(value) : NaN;
+  // An explicit long/invalid hint must never turn into an early default retry.
+  if (header == null && !info?.retryDelay) return [500, 502, 503, 504].includes(response.status) ? 2 ** (attempt + 1) : null;
+  const value = header ?? String(info.retryDelay).replace(/s$/, '');
+  let delay = value !== '' ? Number(value) : NaN;
+  if (!Number.isFinite(delay) && header) delay = (Date.parse(header) - Date.now()) / 1000;
   return Number.isFinite(delay) && delay >= 0 && delay <= 65 ? delay : null;
 }
 
