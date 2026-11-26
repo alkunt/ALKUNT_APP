@@ -22,6 +22,7 @@ const card=(title,layout='bullets')=>({ref:0,layout,title,subtitle:'',body:'شر
 const deck={title:outline.title,cards:outline.cards.map((c,i)=>card(c.title,i===0?'cover':i===2?'closing':'image_text'))};
 let mode='success',calls=[],recovered=false;
 const originalFetch=globalThis.fetch;
+const originalWarn=console.warn,logged=[];console.warn=(...args)=>{logged.push(args);originalWarn(...args);};
 globalThis.fetch=async(url,options)=>{
  assert.equal(String(url),'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent');
  assert.equal(options.headers['x-goog-api-key'],'fixture-gemini-not-a-real-secret');assert.equal(options.redirect,'error');assert.ok(options.signal instanceof AbortSignal);
@@ -32,6 +33,7 @@ globalThis.fetch=async(url,options)=>{
  if(mode==='recover'&&!recovered){recovered=true;return Response.json({error:{details:[{'@type':'type.googleapis.com/google.rpc.RetryInfo',retryDelay:'0.01s'}]}},{status:429});}
  if(mode==='daily')return Response.json({error:{message:'private-provider-detail',details:[{'@type':'type.googleapis.com/google.rpc.QuotaFailure',violations:[{quotaId:'GenerateRequestsPerDayPerProjectPerModel-FreeTier'}]},{'@type':'type.googleapis.com/google.rpc.RetryInfo',retryDelay:'1s'}]}},{status:429});
  if(mode==='auth')return Response.json({error:{message:'private-provider-detail'}},{status:403});
+ if(mode==='bad-format')return Response.json({error:{status:'INVALID_ARGUMENT',message:'private-provider-detail responseJsonSchema'}},{status:400});
  if(mode==='timeout')throw new DOMException('private-provider-detail','TimeoutError');
  if(mode==='safety')return Response.json({promptFeedback:{blockReason:'SAFETY'}});
  if(mode==='partial')return Response.json({candidates:[{finishReason:'MAX_TOKENS',content:{parts:[{text:'private-provider-detail'}]}}]});
@@ -60,12 +62,14 @@ try{
  mode='recover';const before=(await config()).plan.remaining,start=calls.length;
  const recovery=await events(await request('/api/outline',{method:'POST',body:{mode:'generate',prompt:'استكمال تلقائي بعد الازدحام',cardCount:3}}));
  assert.equal(calls.length,start+2);assert.ok(recovery.items.some(x=>x.event==='notice'));assert.ok(recovery.items.some(x=>x.event==='done'));assert.equal((await config()).plan.remaining,before-2);
- for(mode of ['daily','auth','timeout','safety','partial','invalid']){
+ for(mode of ['daily','auth','bad-format','timeout','safety','partial','invalid']){
   const credits=(await config()).plan.remaining;
   const failure=await events(await request('/api/outline',{method:'POST',body:{mode:'generate',prompt:'فحص تعذر طلب Gemini',cardCount:3}}));
   assert.ok(failure.items.some(x=>x.event==='error'),mode);assert.equal(failure.items.some(x=>x.event==='done'),false,mode);assert.equal((await config()).plan.remaining,credits,mode);
+  assert.equal(failure.items.filter(x=>x.event==='credits').at(-1).data.remaining,credits,'The visible balance is restored too.');
   for(const secret of ['private-provider-detail','fixture-gemini-not-a-real-secret','never show private thinking'])assert.equal(failure.text.includes(secret),false);
  }
  assert.equal(geminiRetrySeconds(new Response(null,{status:429}),{error:{details:[{'@type':'type.googleapis.com/google.rpc.RetryInfo',retryDelay:'28.3s'}]}}),28.3);
+ assert.equal(JSON.stringify(logged).includes('private-provider-detail'),false);assert.equal(JSON.stringify(logged).includes('fixture-gemini-not-a-real-secret'),false);
  console.log('PASS: Gemini free-tier-only text/outline/deck/assistant/card and native image/PDF flows, long Arabic input, private account contexts, bounded quota recovery, once-only charges, safe errors and failed-request refunds.');
-}finally{globalThis.fetch=originalFetch;sql.close();assert.ok(path.resolve(directory).startsWith(path.resolve(tmpdir())+path.sep));rmSync(directory,{recursive:true,force:true});}
+}finally{globalThis.fetch=originalFetch;console.warn=originalWarn;sql.close();assert.ok(path.resolve(directory).startsWith(path.resolve(tmpdir())+path.sep));rmSync(directory,{recursive:true,force:true});}

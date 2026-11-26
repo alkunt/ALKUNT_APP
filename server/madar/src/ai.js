@@ -308,7 +308,15 @@ async function runGemini(env, spec, { onText, onWait, signal }) {
     const daily = data?.error?.details?.some(item => item.violations?.some(v => /PerDay|daily/i.test(v.quotaId || '')));
     throw new AIError(daily ? 'بلغ اتصال Gemini حد الاستخدام اليومي المجاني. أعد المحاولة بعد تجدد الحد؛ لم تُخصم نقاط العملية الفاشلة.' : 'خدمة Gemini مزدحمة الآن. لم تُخصم نقاط العملية الفاشلة. جرّب بعد قليل.', 'rate_limit');
   }
-  if (!res.ok) throw new AIError('تعذّر إكمال الطلب من Gemini. أعد المحاولة أو راجع الاتصال من لوحة المالك.', 'provider');
+  if (!res.ok) {
+    // Log only fixed status/parameter names, never the provider's message, key or source.
+    const message = String(data?.error?.message || '');
+    const fields = ['responseJsonSchema','response_json_schema','responseSchema','response_schema','responseFormat','response_format','responseMimeType','additionalProperties','additional_properties','generationConfig','generation_config','thinkingConfig','thinking_config','thinkingLevel','thinking_level','systemInstruction','system_instruction','contents','inlineData','inline_data','maxOutputTokens','max_output_tokens'].filter(field => message.includes(field));
+    const statuses = ['INVALID_ARGUMENT','FAILED_PRECONDITION','NOT_FOUND','UNAVAILABLE','INTERNAL'];
+    const reason = /billing|paid tier|free tier/i.test(message) ? 'tier' : /interactions|method.*not supported/i.test(message) ? 'method' : /schema|additional.?properties/i.test(message) ? 'schema' : /unknown name|invalid json payload/i.test(message) ? 'request_format' : /model.*not|not found/i.test(message) ? 'model' : /country|location|region/i.test(message) ? 'region' : 'other';
+    console.warn('Gemini request rejected', JSON.stringify({ status: res.status, code: statuses.includes(data?.error?.status) ? data.error.status : 'OTHER', reason, fields }));
+    throw new AIError('تعذّر إكمال الطلب من Gemini. أعد المحاولة أو راجع الاتصال من لوحة المالك.', 'provider');
+  }
   const candidate = data?.candidates?.[0];
   if (candidate?.finishReason === 'MAX_TOKENS') throw new AIError('تعذّر إكمال هذا العرض ضمن سعة الرد. قلّل كثافة النص أو عدد البطاقات.', 'max_tokens');
   if (data?.promptFeedback?.blockReason || (candidate?.finishReason && candidate.finishReason !== 'STOP')) throw new AIError('تعذّر تنفيذ هذا الطلب. جرّب صياغة مختلفة.', 'refusal');

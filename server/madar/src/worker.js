@@ -145,7 +145,8 @@ function sse(request, run, { onError } = {}) {
       send('done', final);
     } catch (e) {
       if (e?.name !== 'AbortError') console.error('stream failed', e?.code || e?.name || 'provider');
-      await onError?.(e);
+      const restored = await onError?.(e);
+      if (restored?.remaining != null) send('credits', restored);
       send('error', { error: aiErrorMessage(e) });
     } finally {
       clearInterval(ping);
@@ -169,6 +170,12 @@ const waitingNotice = send => ({ seconds }) => send('notice', {
     ? `الخدمة مزدحمة مؤقتًا. ننتظر ${seconds} ثانية ثم نكمل طلبك تلقائيًا؛ لا حاجة لإعادة المحاولة.`
     : 'طلبك في قائمة الانتظار. سيكمل مدار تلقائيًا عند توفر الخدمة.',
 });
+
+async function refundFailedRequest(env, credit, error) {
+  await credit.refund();
+  await noteQuota(env, error);
+  return { remaining: (await plans.planStatus(env)).remaining };
+}
 
 // Validates an uploaded PDF or image set. Returns { type, ... } or null when none was sent.
 function cleanSourceFile(file) {
@@ -237,7 +244,7 @@ async function routeOutline(request, env, who) {
       const out = c.demo ? await mock.mockOutline(input, handlers) : await ai.outline(env, input, handlers);
       return { ...out.data, demo: c.demo, sourceText: mode === 'generate' ? '' : input.text };
     },
-    { onError: async (e) => (await credit.refund(), await noteQuota(env, e)) },
+    { onError: (e) => refundFailedRequest(env, credit, e) },
   );
 }
 
@@ -324,7 +331,7 @@ async function routeGenerate(request, env, who) {
       const out = c.demo ? await mock.mockDeck(input, handlers) : await ai.generateDeck(env, input, handlers);
       return { ...out.data, demo: c.demo };
     },
-    { onError: async (e) => (await credit.refund(), await noteQuota(env, e)) },
+    { onError: (e) => refundFailedRequest(env, credit, e) },
   );
 }
 
@@ -376,7 +383,7 @@ async function routeAssistant(request, env, who) {
       const out = c.demo ? await mock.mockAssistant(input, handlers) : await ai.assistant(env, input, handlers);
       return { ...out.data, demo: c.demo };
     },
-    { onError: async (e) => (await credit.refund(), await noteQuota(env, e)) },
+    { onError: (e) => refundFailedRequest(env, credit, e) },
   );
 }
 
