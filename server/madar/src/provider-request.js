@@ -42,9 +42,10 @@ export async function queuedProviderJSON({ provider, apiKey, model, send, retryS
       active.throwIfAborted();
       const res = await send(AbortSignal.any([active, AbortSignal.timeout(55000)]));
       const data = await res.json().catch(() => ({}));
-      const delay = res.status === 429 ? retrySeconds(res, data) : null;
+      const retryable = [429, 500, 502, 503, 504].includes(res.status);
+      const delay = retryable ? retrySeconds(res, data, attempt) : null;
       if (delay == null || attempt >= 2) return { res, data };
-      onWait?.({ reason: 'limit', seconds: Math.ceil(delay + 0.5) });
+      onWait?.({ reason: res.status === 429 ? 'limit' : 'unavailable', seconds: Math.ceil(delay + 0.5) });
       await pause((delay + 0.5) * 1000, active);
     }
   } finally {

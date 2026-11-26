@@ -30,7 +30,10 @@ globalThis.fetch=async(url,options)=>{
  assert.equal(body.generationConfig.responseMimeType,'application/json');assert.ok(body.generationConfig.responseJsonSchema);
  assert.equal(body.generationConfig.thinkingConfig.thinkingLevel,'LOW');assert.equal(body.generationConfig.thinkingConfig.includeThoughts,false);
  assert.equal(body.generationConfig.imageConfig,undefined);assert.equal(body.tools,undefined);assert.equal(body.previous_interaction_id,undefined);
+ const responseCard=body.generationConfig.responseJsonSchema.properties.cards?.items||body.generationConfig.responseJsonSchema;
+ if(responseCard.properties?.items){assert.equal(responseCard.properties.items.items.properties.icon.enum,undefined);assert.ok(responseCard.properties.items.items.properties.icon.description.includes('sparkles'));}
  if(mode==='recover'&&!recovered){recovered=true;return Response.json({error:{details:[{'@type':'type.googleapis.com/google.rpc.RetryInfo',retryDelay:'0.01s'}]}},{status:429});}
+ if((mode==='recover503'&&!recovered)||mode==='unavailable'){recovered=true;return Response.json({error:{status:'UNAVAILABLE',message:'private-provider-detail',details:[{'@type':'type.googleapis.com/google.rpc.RetryInfo',retryDelay:'0.01s'}]}},{status:503});}
  if(mode==='daily')return Response.json({error:{message:'private-provider-detail',details:[{'@type':'type.googleapis.com/google.rpc.QuotaFailure',violations:[{quotaId:'GenerateRequestsPerDayPerProjectPerModel-FreeTier'}]},{'@type':'type.googleapis.com/google.rpc.RetryInfo',retryDelay:'1s'}]}},{status:429});
  if(mode==='auth')return Response.json({error:{message:'private-provider-detail'}},{status:403});
  if(mode==='bad-format')return Response.json({error:{status:'INVALID_ARGUMENT',message:'private-provider-detail responseJsonSchema'}},{status:400});
@@ -39,6 +42,7 @@ globalThis.fetch=async(url,options)=>{
  if(mode==='partial')return Response.json({candidates:[{finishReason:'MAX_TOKENS',content:{parts:[{text:'private-provider-detail'}]}}]});
  const schema=body.generationConfig.responseJsonSchema;
  const result=mode==='invalid'?{}:schema.properties.source_notes?outline:schema.properties.layout?card('بطاقة معدّلة'):schema.properties.reply?{...deck,reply:'تم ترتيب البطاقات.'}:deck;
+ if(mode==='unknown-icon'){result.items=[{icon:'not-a-supported-icon',title:'عنوان',text:'شرح',value:'',unexpected:'discard'}];result.unexpected='discard';}
  return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'never show private thinking'},{text:JSON.stringify(result)}]}}]});
 };
 try{
@@ -49,6 +53,8 @@ try{
  assert.equal((await completed(await request('/api/generate',{method:'POST',body:{outline:planned,topic:'ALICE_PRIVATE فكرة عربية'}}))).cards.length,3);
  assert.equal((await completed(await request('/api/assistant',{method:'POST',body:{deck,instruction:'أعد ترتيب الأفكار'}}))).reply,'تم ترتيب البطاقات.');
  assert.equal((await request('/api/card',{method:'POST',body:{card:deck.cards[1],instruction:'اختصر البطاقة',deckTitle:deck.title}})).status,200);
+ mode='unknown-icon';const normalized=await(await request('/api/card',{method:'POST',body:{card:deck.cards[1],instruction:'توضيح الفكرة',deckTitle:deck.title}})).json();
+ assert.equal(normalized.card.items[0].icon,'sparkles');assert.equal(normalized.card.unexpected,undefined);assert.equal(normalized.card.items[0].unexpected,undefined);mode='success';
  const longSource='بداية المصدر العربي\n'+('تحديد الهدف وتقسيم المهام والمراجعة اليومية. '.repeat(1500)).slice(0,59000)+'\nنهاية المصدر: تحديث الأولويات.';
  const longOutline=await completed(await request('/api/outline',{method:'POST',body:{mode:'text',text:longSource,cardCount:3}}));
  assert.equal(longOutline.sourceText,longSource);assert.ok(calls.at(-1).contents[0].parts.some(part=>part.text?.includes(longSource)));
@@ -62,11 +68,16 @@ try{
  mode='recover';const before=(await config()).plan.remaining,start=calls.length;
  const recovery=await events(await request('/api/outline',{method:'POST',body:{mode:'generate',prompt:'استكمال تلقائي بعد الازدحام',cardCount:3}}));
  assert.equal(calls.length,start+2);assert.ok(recovery.items.some(x=>x.event==='notice'));assert.ok(recovery.items.some(x=>x.event==='done'));assert.equal((await config()).plan.remaining,before-2);
- for(mode of ['daily','auth','bad-format','timeout','safety','partial','invalid']){
+ mode='recover503';recovered=false;const before503=(await config()).plan.remaining,start503=calls.length;
+ const recovery503=await events(await request('/api/outline',{method:'POST',body:{mode:'generate',prompt:'استكمال تلقائي بعد تعذر الخدمة',cardCount:3}}));
+ assert.equal(calls.length,start503+2);assert.ok(recovery503.items.some(x=>x.event==='notice'));assert.ok(recovery503.items.some(x=>x.event==='done'));assert.equal((await config()).plan.remaining,before503-2);
+ for(mode of ['unavailable','daily','auth','bad-format','timeout','safety','partial','invalid']){
   const credits=(await config()).plan.remaining;
+  const failureStart=calls.length;
   const failure=await events(await request('/api/outline',{method:'POST',body:{mode:'generate',prompt:'فحص تعذر طلب Gemini',cardCount:3}}));
   assert.ok(failure.items.some(x=>x.event==='error'),mode);assert.equal(failure.items.some(x=>x.event==='done'),false,mode);assert.equal((await config()).plan.remaining,credits,mode);
   assert.equal(failure.items.filter(x=>x.event==='credits').at(-1).data.remaining,credits,'The visible balance is restored too.');
+  if(mode==='unavailable'){assert.equal(calls.length,failureStart+3);assert.ok(failure.text.includes('غير متاحة مؤقتًا'));}
   for(const secret of ['private-provider-detail','fixture-gemini-not-a-real-secret','never show private thinking'])assert.equal(failure.text.includes(secret),false);
  }
  assert.equal(geminiRetrySeconds(new Response(null,{status:429}),{error:{details:[{'@type':'type.googleapis.com/google.rpc.RetryInfo',retryDelay:'28.3s'}]}}),28.3);
