@@ -9,6 +9,7 @@ import { renderCard, scaled } from './render.js';
 import { logoElement } from './logo.js';
 import { uid } from './ui.js';
 import { openProviderSettings } from './provider-settings.js';
+import { imageSources, imageStyles } from './images.js';
 
 const EXAMPLES = [
   'خطة تسويق لمقهى مختص في الكويت',
@@ -37,8 +38,8 @@ export function mountHome(root) {
     format: prefs.format || 'presentation',
     lang: prefs.lang || 'ar',
     density: prefs.density || 'medium',
-    imageSource: config.demo ? 'none' : (prefs.imageSource || (config.aiImages ? 'ai' : 'stock')),
-    imageStyle: prefs.imageStyle || 'photo',
+    imageSource: Object.hasOwn(imageSources(), prefs.imageSource) ? prefs.imageSource : (config.demo ? 'none' : config.aiImages ? 'ai' : 'stock'),
+    imageStyle: Object.hasOwn(imageStyles(), prefs.imageStyle) ? prefs.imageStyle : config.imageEngine === 'gemini-illustration' ? 'flat' : 'photo',
     tone: prefs.tone || 'professional',
     cardCount: prefs.cardCount || 10,
     sourceMode: 'condense',
@@ -183,11 +184,11 @@ export function mountHome(root) {
       h('label', { class: 'lbl' }, 'عدد البطاقات', select(counts, f.cardCount, (v) => ((f.cardCount = v === 'auto' ? 'auto' : +v), (f._touchedCount = true), persist()))),
       h('label', { class: 'lbl' }, 'اللغة', select(LANGUAGES, f.lang, (v) => ((f.lang = v), persist()))),
       h('label', { class: 'lbl' }, 'كمية النص', select(DENSITY, f.density, (v) => ((f.density = v), persist()))),
-      h('label', { class: 'lbl' }, 'الصور', select(config.demo ? {none:IMAGE_SOURCES.none} : config.aiImages ? IMAGE_SOURCES : { stock: IMAGE_SOURCES.stock, none: IMAGE_SOURCES.none }, f.imageSource, (v) => ((f.imageSource = v), persist()))),
+      h('label', { class: 'lbl' }, 'الصور', select(imageSources(), f.imageSource, (v) => ((f.imageSource = v), persist()))),
     );
     adv.replaceChildren(
       h('label', { class: 'lbl' }, 'النبرة', select(TONES, f.tone, (v) => ((f.tone = v), persist()))),
-      h('label', { class: 'lbl' }, 'نمط الصور', select(IMAGE_STYLES, f.imageStyle, (v) => ((f.imageStyle = v), persist()))),
+      h('label', { class: 'lbl' }, 'نمط الصور', select(imageStyles(), f.imageStyle, (v) => ((f.imageStyle = v), persist()))),
       f.mode === 'generate' ? null : h('label', { class: 'lbl' }, 'التعامل مع المصدر', select(SOURCE_MODES, f.sourceMode, (v) => (f.sourceMode = v))),
       h('label', { class: 'lbl' }, 'الجمهور', h('input', { class: 'field', placeholder: 'مثلاً: رواد أعمال مبتدئون', maxlength: 200, value: f.audience, onInput: (e) => (f.audience = e.target.value) })),
       h('label', { class: 'lbl', style: { gridColumn: '1 / -1' } }, 'تعليمات إضافية للكتابة', h('input', { class: 'field', placeholder: 'مثلاً: أضف أمثلة من الخليج، واختم بسؤال للنقاش', maxlength: LIMITS.instruction, value: f.instructions, onInput: (e) => (f.instructions = e.target.value) })),

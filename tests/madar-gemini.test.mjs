@@ -48,7 +48,7 @@ globalThis.fetch=async(url,options)=>{
 try{
  assert.deepEqual(textEngines({GEMINI_TEXT_API_KEY:'fixture',GROQ_API_KEY:'fixture',TEXT_PROVIDER:'gemini'}),['gemini']);
  assert.equal((await request('/api/config',{user:null})).status,401);
- const initial=await config();assert.equal(initial.demo,false);assert.equal(initial.textEngine,'gemini');assert.equal(initial.aiImages,false);assert.equal(initial.imageEngine,'none');assert.equal(initial.worksPrivate,true);
+ const initial=await config();assert.equal(initial.demo,false);assert.equal(initial.textEngine,'gemini');assert.equal(initial.aiImages,true);assert.equal(initial.imageEngine,'gemini-illustration');assert.equal(initial.worksPrivate,true);
  const planned=await completed(await request('/api/outline',{method:'POST',body:{mode:'generate',prompt:'ALICE_PRIVATE فكرة عربية',cardCount:3}}));assert.equal(planned.cards.length,3);
  assert.equal((await completed(await request('/api/generate',{method:'POST',body:{outline:planned,topic:'ALICE_PRIVATE فكرة عربية'}}))).cards.length,3);
  assert.equal((await completed(await request('/api/assistant',{method:'POST',body:{deck,instruction:'أعد ترتيب الأفكار'}}))).reply,'تم ترتيب البطاقات.');

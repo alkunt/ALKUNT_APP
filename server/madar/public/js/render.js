@@ -279,7 +279,7 @@ function media(card, ctx, pos) {
     });
     el.addEventListener('error', () => fig.classList.add('broken'), { once: true });
     fig.append(el);
-    if (img.credit && pos !== 'bg') fig.append(h('figcaption', { class: 'mc-credit', 'data-noexport': '' }, img.credit));
+    if (img.credit) fig.append(h('figcaption', { class: 'mc-credit' }, /^https:\/\//.test(img.link || '') ? h('a', { href: img.link, target: '_blank', rel: 'noopener noreferrer', style: { color: 'inherit' }, onClick: e => e.stopPropagation() }, img.credit) : img.credit));
   } else {
     fig.classList.add(img.loading ? 'loading' : 'empty');
     fig.append(h('div', { class: 'mc-media-ph' }, icon(img.loading ? 'sparkles' : 'image', 34), img.loading ? h('span', {}, 'جارٍ تجهيز الصورة…') : ctx.editable ? h('span', {}, 'أضف صورة') : null));

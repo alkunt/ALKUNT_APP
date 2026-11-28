@@ -65,7 +65,7 @@ try{
  const gemini=await post({provider:'gemini',apiKey:geminiKey});assert.equal(gemini.status,200);const geminiStatus=await gemini.text();assert.equal(geminiStatus.includes(geminiKey),false);assert.equal(JSON.parse(geminiStatus).provider,'gemini');assert.equal(JSON.parse(geminiStatus).enabled,true);
  assert.equal(configuredProvider().model,'gemini-3.8-flash');
  const geminiEncrypted=sql.prepare('SELECT encrypted_key FROM madar_provider_config').get().encrypted_key;assert.equal(geminiEncrypted.includes(geminiKey),false);
- const memberConfig=await (await call('/api/config',{user:'member'})).json();assert.equal(memberConfig.textEngine,'gemini');assert.equal(memberConfig.aiImages,false);assert.equal(memberConfig.sharing,'owner-only');assert.equal(JSON.stringify(memberConfig).includes(geminiKey),false);
+ const memberConfig=await (await call('/api/config',{user:'member'})).json();assert.equal(memberConfig.textEngine,'gemini');assert.equal(memberConfig.aiImages,true);assert.equal(memberConfig.imageEngine,'gemini-illustration');assert.equal(memberConfig.sharing,'owner-only');assert.equal(JSON.stringify(memberConfig).includes(geminiKey),false);
  sql.prepare("UPDATE madar_provider_config SET provider='groq',model='openai/gpt-oss-120b'").run();assert.equal(configuredProvider(),null,'Ciphertext is bound to its provider and model.');
  sql.prepare("UPDATE madar_provider_config SET provider='gemini',model='gemini-3.8-flash'").run();assert.equal(configuredProvider().apiKey,geminiKey);
  resetLimit();assert.equal((await post({provider:'gemini',model:'gemini-3.5-flash-lite'})).status,200);assert.equal(configuredProvider().model,'gemini-3.5-flash-lite');

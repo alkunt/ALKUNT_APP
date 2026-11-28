@@ -1,7 +1,10 @@
 // Image helpers in the browser: search, AI generation, upload, and auto-filling a deck.
 import { postJSON, request, config, ApiError, canAfford, deviceHeaders } from './api.js';
-import { LIMITS, imageAspect } from './schema.js';
+import { LIMITS, imageAspect, defaultImagePos, IMAGE_SOURCES, IMAGE_STYLES } from './schema.js';
 import { toast } from './ui.js';
+
+export const imageSources = () => config.demo ? { none: IMAGE_SOURCES.none } : config.aiImages ? { ...IMAGE_SOURCES, ...(config.imageEngine === 'gemini-illustration' ? { ai: 'رسوم توضيحية بالذكاء الاصطناعي · مجانية' } : {}) } : { stock: IMAGE_SOURCES.stock, none: IMAGE_SOURCES.none };
+export const imageStyles = () => config.imageEngine === 'gemini-illustration' ? { flat: 'رسم توضيحي ملون', lineart: 'رسم بخطوط بسيطة' } : IMAGE_STYLES;
 
 export async function searchImages(q, page = 1) {
   const { results } = await request('GET', `/madar/api/images?q=${encodeURIComponent(q)}&page=${page}`);
@@ -61,9 +64,18 @@ export async function uploadImage(file) {
 
 // Fills every card that should show an image but has none yet.
 // onCard(index) is called whenever a card's image state changes.
-export async function fillImages(deck, onCard, { only } = {}) {
+export async function fillImages(deck, onCard, { only, retryMissing = false } = {}) {
   const source = deck.imageSource || 'stock';
   if (source === 'none') return;
+  if (retryMissing) {
+    for (const [i, card] of deck.cards.entries()) {
+      if (card.image?.url) continue;
+      card.image ||= { query: card.title || '' };
+      if (!card.image.pos || card.image.pos === 'none') card.image.pos = defaultImagePos(card.layout, deck.format, i, card.items?.length || 0);
+      delete card.image.retryAt;
+      delete card.image.retryPos;
+    }
+  }
   // Slides left without a picture on a day the generator was out get another try once it has renewed.
   if (source === 'ai' && only == null) {
     for (const c of deck.cards) {
@@ -95,7 +107,7 @@ export async function fillImages(deck, onCard, { only } = {}) {
       const img = await aiImage(q, deck.settings?.imageStyle, imageAspect(deck.format, c.image.pos), deck.topic || deck.title, slideOf(c));
       return img?.source === 'stock' && used.has(img.url) ? null : img; // never the same photo on two slides
     }
-    const { image } = await postJSON('/madar/api/image-match', { query: q });
+    const { image } = await postJSON('/madar/api/image-match', { query: q, exclude: [...used] });
     return image && !used.has(image.url) ? image : null;
   };
   let missing = 0;
@@ -106,13 +118,14 @@ export async function fillImages(deck, onCard, { only } = {}) {
       // One retry: free photo services sometimes refuse a burst of requests.
       try {
         img = await find(q, c);
-      } catch {
+      } catch (error) {
+        if (source === 'ai') throw error;
         await new Promise((r) => setTimeout(r, 1500));
         img = await find(q, c);
       }
       if (img?.url) {
         used.add(img.url);
-        Object.assign(c.image, { url: img.url, alt: img.alt || q, credit: img.credit || '', source: img.source || source });
+        Object.assign(c.image, { url: img.url, alt: img.alt || q, credit: img.credit || '', link: img.link || '', source: img.source || source });
       } else {
         // Nothing that shows this subject: a clean text slide beats an unrelated picture.
         if (source === 'ai') Object.assign(c.image, { retryPos: c.image.pos, retryAt: nextReset() });
@@ -128,12 +141,14 @@ export async function fillImages(deck, onCard, { only } = {}) {
   };
 
   // AI images one at a time (they are slower and rate limited); photos three at a time.
-  const width = source === 'ai' ? 1 : 3;
+  // Reserve each selected URL before the next photo search so two cards cannot
+  // race to choose the same first result.
+  const width = 1;
   const queue = jobs.slice();
   await Promise.all(
     Array.from({ length: width }, async () => {
       while (queue.length) await one(queue.shift());
     }),
   );
-  if (missing) toast(`لم نجد صورة مطابقة لموضوع ${missing === 1 ? 'شريحة واحدة' : `${missing} ${missing > 10 ? 'شريحة' : 'شرائح'}`}، فتركناها بلا صورة.${Date.now() < mainOutUntil ? ' ستُولَّد تلقائياً عند فتح العرض بعد تجدد الحصة الساعة 3 فجراً بتوقيت الكويت.' : ' يمكنك إضافتها من زر الصورة.'}`, 'info', 8000);
+  if (missing) toast(source === 'ai' ? `تعذّر تجهيز صور ${missing} من البطاقات. يمكنك إعادة المحاولة من «إكمال الصور» أو من زر الصورة في البطاقة.` : `لم نجد صورة مطابقة لموضوع ${missing === 1 ? 'شريحة واحدة' : `${missing} ${missing > 10 ? 'شريحة' : 'شرائح'}`}، فتركناها بلا صورة. يمكنك إضافتها من زر الصورة.`, 'info', 8000);
 }
