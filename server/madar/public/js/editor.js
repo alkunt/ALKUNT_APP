@@ -926,8 +926,8 @@ export function mountEditor(root, deckId) {
       );
     }
     // search
-    const q = h('input', { class: 'field grow', value: img.query || c.title || '', placeholder: 'ابحث بالإنجليزية لنتائج أفضل', 'aria-label': 'بحث عن صورة' });
-    const results = h('div', { class: 'img-grid' });
+    const q = h('input', { class: 'field grow', value: c.title || deck.title || '', placeholder: 'ابحث عن صورة مرتبطة بالبطاقة', 'aria-label': 'بحث عن صورة' });
+    const results = h('div', { class: 'img-grid' }, h('p', {class:'tiny'}, 'اضغط بحث لاختيار صورة فوتوغرافية.'));
     let page = 1;
     const more = button('المزيد', { kind: 'soft', size: 'sm', onClick: () => doSearch(page + 1) });
     more.hidden = true;
@@ -950,7 +950,6 @@ export function mountEditor(root, deckId) {
     }
     q.addEventListener('keydown', (e) => e.key === 'Enter' && doSearch(1));
     body.append(h('div', { class: 'panel', style: { padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' } }, h('h3', {}, icon('search', 18), 'صور فوتوغرافية مجانية'), h('div', { class: 'row' }, q, button('', { icon: 'search', cls: 'btn-icon btn-soft', title: 'بحث', onClick: () => doSearch(1) })), results, more));
-    doSearch(1);
 
     // AI
     if (config.aiImages) {
