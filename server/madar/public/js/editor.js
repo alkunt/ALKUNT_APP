@@ -7,7 +7,7 @@ import { loadDeck, saveDeck, History, setPref } from './store.js';
 import { renderCard, scaled, fitCard, htmlToMd, isFixed, deckDir } from './render.js';
 import { THEMES, FONT_CHOICES, customTheme, getTheme } from './themes.js';
 import { themeTile } from './outline.js';
-import { fillImages, searchImages, aiImage, uploadImage } from './images.js';
+import { fillImages, searchImages, aiImage, uploadImage, imageSources, imageStyles } from './images.js';
 import { startPresent } from './present.js';
 import { openShare } from './share.js';
 import { exportPDF, exportPPTX, exportPNG, exportJSON } from './export.js';
@@ -129,6 +129,14 @@ export function mountEditor(root, deckId) {
     redoBtn.disabled = !hist.canRedo() || generating;
   }
   const exportBtn = button('تصدير', { icon: 'download', onClick: (e) => exportMenu(e.currentTarget) });
+  const completeImages = button('إكمال الصور', { icon: 'image-plus', disabled: config.demo, onClick: async () => {
+    if (generating || completeImages.disabled) return;
+    snap();
+    if (deck.imageSource === 'none' || !Object.hasOwn(imageSources(), deck.imageSource)) deck.imageSource = config.aiImages ? 'ai' : 'stock';
+    completeImages.disabled = true;
+    try { await fillImages(deck, onImage, { retryMissing: true }); }
+    finally { completeImages.disabled = false; saveSoon(); }
+  } });
   const topbar = h(
     'header',
     { class: 'topbar' },
@@ -140,6 +148,7 @@ export function mountEditor(root, deckId) {
     undoBtn,
     redoBtn,
     button('الثيم', { icon: 'palette', onClick: () => togglePanel('themes') }),
+    completeImages,
     button('المساعد', { disabled:config.demo, title:config.demo?'المساعد الذكي غير مفعّل':null, icon: 'wand-sparkles', cls: 'ai-btn', onClick: () => togglePanel('assistant') }),
     exportBtn,
     button('حفظ ورابط', { icon: 'lock', onClick: () => !generating && openShare(deck, { onChange: save }) }),
@@ -790,7 +799,7 @@ export function mountEditor(root, deckId) {
           renderAll();
           saveSoon();
         })),
-        h('label', { class: 'lbl' }, 'مصدر الصور الجديدة', select(config.demo ? {none:IMAGE_SOURCES.none} : config.aiImages ? IMAGE_SOURCES : { stock: IMAGE_SOURCES.stock, none: IMAGE_SOURCES.none }, deck.imageSource || 'stock', (v) => {
+        h('label', { class: 'lbl' }, 'مصدر الصور الجديدة', select(imageSources(), deck.imageSource || 'stock', (v) => {
           deck.imageSource = v;
           saveSoon();
         })),
@@ -932,7 +941,7 @@ export function mountEditor(root, deckId) {
         if (!list.length && p === 1) results.append(h('p', { class: 'tiny' }, 'لا نتائج. جرّب كلمات أخرى بالإنجليزية.'));
         results.querySelector('.spinner')?.remove();
         for (const r of list)
-          results.append(h('button', { type: 'button', title: r.credit, onClick: () => set({ url: r.url, alt: r.alt, credit: r.credit, source: 'stock', query: term, pos: img.pos === 'none' ? defaultImagePos('image_text', deck.format, 1) : img.pos }) }, h('img', { src: r.thumb, alt: r.alt, loading: 'lazy', referrerpolicy: 'no-referrer' })));
+          results.append(h('button', { type: 'button', title: r.credit, onClick: () => set({ url: r.url, alt: r.alt, credit: r.credit, link: r.link || '', source: 'stock', query: term, pos: img.pos === 'none' ? defaultImagePos('image_text', deck.format, 1) : img.pos }) }, h('img', { src: r.thumb, alt: r.alt, loading: 'lazy', referrerpolicy: 'no-referrer' })));
         more.hidden = list.length < 10;
       } catch (e) {
         results.replaceChildren(h('p', { class: 'tiny' }, e.message));
@@ -945,7 +954,7 @@ export function mountEditor(root, deckId) {
     // AI
     if (config.aiImages) {
       const prompt = h('textarea', { class: 'field', rows: 2, style: { minHeight: '64px' }, value: img.query || c.title || '', placeholder: 'صِف الصورة التي تريدها' });
-      let style = deck.settings.imageStyle || 'photo';
+      let style = Object.hasOwn(imageStyles(), deck.settings.imageStyle) ? deck.settings.imageStyle : config.imageEngine === 'gemini-illustration' ? 'flat' : 'photo';
       const go = button(`ولّد صورة${costLabel('image')}`, { kind: 'primary', size: 'sm', icon: 'wand-sparkles', onClick: async () => {
         if (!prompt.value.trim()) return;
         go.disabled = true;
@@ -962,7 +971,7 @@ export function mountEditor(root, deckId) {
           go.lastChild.textContent = 'ولّد صورة';
         }
       } });
-      body.append(h('div', { class: 'panel', style: { padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' } }, h('h3', {}, icon('wand-sparkles', 18), config.imageEngine === 'nano-banana' ? 'توليد بـ Nano Banana' : 'توليد بالذكاء الاصطناعي'), prompt, select(IMAGE_STYLES, style, (v) => (style = v)), go));
+      body.append(h('div', { class: 'panel', style: { padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' } }, h('h3', {}, icon('wand-sparkles', 18), config.imageEngine === 'gemini-illustration' ? 'رسوم توضيحية بالذكاء الاصطناعي' : config.imageEngine === 'nano-banana' ? 'توليد بـ Nano Banana' : 'توليد بالذكاء الاصطناعي'), config.imageEngine === 'gemini-illustration' ? h('p', { class: 'tiny' }, 'رسم توضيحي خاص بموضوعك ضمن الاتصال المجاني. للصور الواقعية اختر الصور الفوتوغرافية المجانية.') : null, prompt, select(imageStyles(), style, (v) => (style = v)), go));
     }
     // upload
     const file = h('input', { type: 'file', accept: 'image/*', hidden: true, onChange: async (e) => {

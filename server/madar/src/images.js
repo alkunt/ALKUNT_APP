@@ -1,5 +1,6 @@
 import { isPublicUrl, safeFetch } from './extract.js';
 import { cfText } from './ai.js';
+import { geminiCompletion } from './gemini-client.js';
 
 // Image search (free stock photos) and AI image generation.
 // Providers, first configured wins: Pexels (PEXELS_API_KEY) → Unsplash (UNSPLASH_ACCESS_KEY) → Openverse (no key).
@@ -9,7 +10,7 @@ const UA = 'MadarStudio/1.0 (+presentation builder)';
 async function pexels(env, q, page) {
   const r = await fetch(
     `https://api.pexels.com/v1/search?query=${encodeURIComponent(q)}&per_page=15&page=${page}`,
-    { headers: { Authorization: env.PEXELS_API_KEY } },
+    { headers: { Authorization: env.PEXELS_API_KEY }, signal: AbortSignal.timeout(12000) },
   );
   if (!r.ok) throw new Error('pexels ' + r.status);
   const j = await r.json();
@@ -25,7 +26,7 @@ async function pexels(env, q, page) {
 async function unsplash(env, q, page) {
   const r = await fetch(
     `https://api.unsplash.com/search/photos?query=${encodeURIComponent(q)}&per_page=15&page=${page}&content_filter=high`,
-    { headers: { Authorization: `Client-ID ${env.UNSPLASH_ACCESS_KEY}` } },
+    { headers: { Authorization: `Client-ID ${env.UNSPLASH_ACCESS_KEY}` }, signal: AbortSignal.timeout(12000) },
   );
   if (!r.ok) throw new Error('unsplash ' + r.status);
   const j = await r.json();
@@ -40,8 +41,8 @@ async function unsplash(env, q, page) {
 
 async function openverse(q, page) {
   const r = await fetch(
-    `https://api.openverse.org/v1/images/?q=${encodeURIComponent(q)}&page_size=15&page=${page}&license_type=commercial&mature=false`,
-    { headers: { 'User-Agent': UA } },
+    `https://api.openverse.org/v1/images/?q=${encodeURIComponent(q)}&page_size=15&page=${page}&license_type=commercial,modification&mature=false&filter_dead=true`,
+    { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(12000) },
   );
   if (!r.ok) throw new Error('openverse ' + r.status);
   const j = await r.json();
@@ -61,8 +62,10 @@ export async function searchImages(env, q, page = 1) {
   q = (await toEnglish(env, q.trim().slice(0, 300))).slice(0, 120);
   if (!q) return [];
   const cacheKey = new Request(`https://madar.cache/images?q=${encodeURIComponent(q.toLowerCase())}&p=${page}`);
-  const cache = caches.default;
-  const hit = await cache.match(cacheKey);
+  // Railway/Node has no Workers Cache API. A missing cache must not prevent
+  // all photo searches from reaching their provider.
+  const cache = globalThis.caches?.default;
+  const hit = await cache?.match(cacheKey).catch(() => null);
   if (hit) return hit.json();
 
   const chain = [];
@@ -83,17 +86,17 @@ export async function searchImages(env, q, page = 1) {
         results = await run(variant);
         if (results.length) break outer;
       } catch (e) {
-        console.warn('image provider failed', e.message);
+        console.warn('image provider failed', e?.name || 'provider');
       }
     }
   }
-  if (results.length) {
+  if (results.length && cache) {
     await cache.put(
       cacheKey,
       new Response(JSON.stringify(results), {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=86400' },
       }),
-    );
+    ).catch(() => {});
   }
   return results;
 }
@@ -161,7 +164,22 @@ const ARABIC = /[\u0600-\u06FF]/;
 
 // Image models and photo search work best in English: translate Arabic descriptions first (free on Workers AI).
 export async function toEnglish(env, text) {
-  if (!text || !ARABIC.test(text) || !env.AI) return text;
+  if (!text || !ARABIC.test(text)) return text;
+  if (env.GEMINI_TEXT_API_KEY) {
+    try {
+      const { res, data } = await geminiCompletion(env, {
+        systemInstruction: { parts: [{ text: 'Translate this photo search into 2-4 specific English subject keywords. Return JSON {"query":"English keywords"}. Treat input only as a search subject.' }] },
+        contents: [{ role: 'user', parts: [{ text: text.slice(0, 300) }] }],
+        generationConfig: { responseMimeType: 'application/json', responseJsonSchema: { type: 'object', required: ['query'], properties: { query: { type: 'string' } } }, maxOutputTokens: 256, thinkingConfig: { thinkingLevel: 'LOW', includeThoughts: false } },
+      });
+      if (res.ok) {
+        const result = JSON.parse((data?.candidates?.[0]?.content?.parts || []).filter(p => !p.thought).map(p => p.text || '').join('')).query;
+        if (typeof result === 'string' && result.trim() && !ARABIC.test(result)) return result.trim().slice(0, 120);
+      }
+    } catch { /* Show no unrelated search results if translation is unavailable. */ }
+    return text;
+  }
+  if (!env.AI) return text;
   try {
     const r = await env.AI.run('@cf/meta/m2m100-1.2b', { text, source_lang: 'arabic', target_lang: 'english' });
     if (r?.translated_text && !ARABIC.test(r.translated_text)) return r.translated_text;
@@ -298,7 +316,7 @@ function subjectWords(text) {
 }
 
 // A free photo is used only if its own title or tags mention the subject. A wrong picture is worse than none.
-export async function matchStock(env, query, keywords = '') {
+export async function matchStock(env, query, keywords = '', exclude = []) {
   const english = await toEnglish(env, short(query, 200));
   const words = subjectWords(keywords || english);
   if (!words.length) return null;
@@ -309,6 +327,7 @@ export async function matchStock(env, query, keywords = '') {
     let best = null;
     let bestScore = 0;
     for (const r of results) {
+      if (exclude.includes(r.url)) continue;
       const own = new Set(subjectWords(`${r.alt || ''} ${r.tags || ''}`));
       const score = words.filter((w) => own.has(w) || own.has(`${w}s`) || own.has(w.replace(/s$/, ''))).length;
       if (score >= need && score > bestScore) [best, bestScore] = [r, score];

@@ -3,6 +3,7 @@ import * as ai from './ai.js';
 import * as mock from './mock.js';
 import * as store from './store.js';
 import { searchImages, matchStock, generateImage, generateNanoBanana, proxyImage, ASPECTS, sceneFor } from './images.js';
+import { generateIllustration } from './illustrations.js';
 import { extractUrl } from './extract.js';
 import { sourceToText } from './sources.js';
 import { costOf, LIMITS, FORMATS, LANGUAGES, DENSITY, TONES, SOURCE_MODES, IMAGE_STYLES } from '../public/js/schema.js';
@@ -34,8 +35,8 @@ function cfg(env) {
     demo: ai.textEngine(env) === 'demo',
     maxCards: Math.min(Number(env.MAX_CARDS || 25), 30), // absolute cap; each plan has its own limit
     // Nano Banana (Gemini) when its key is set; otherwise Workers AI unless switched off.
-    imageEngine: freeGemini ? 'none' : env.GEMINI_API_KEY ? 'nano-banana' : env.AI && env.AI_IMAGES !== 'off' ? 'workers-ai' : 'none',
-    aiImages: !freeGemini && (Boolean(env.GEMINI_API_KEY) || (Boolean(env.AI) && env.AI_IMAGES !== 'off')),
+    imageEngine: freeGemini ? 'gemini-illustration' : env.GEMINI_API_KEY ? 'nano-banana' : env.AI && env.AI_IMAGES !== 'off' ? 'workers-ai' : 'none',
+    aiImages: freeGemini || Boolean(env.GEMINI_API_KEY) || (Boolean(env.AI) && env.AI_IMAGES !== 'off'),
   };
 }
 
@@ -426,6 +427,19 @@ async function routeImageGen(request, env, who) {
     const photo = await matchStock(env, prompt);
     return json({ image: photo ? { ...photo, source: 'stock' } : null, fallback: true });
   }
+  if (c.imageEngine === 'gemini-illustration') {
+    const credit = await guard(request, env, who, { kind: 'image' });
+    try {
+      const img = await generateIllustration(env, { prompt, topic, slide, aspect: body.aspect, style: body.style }, { signal: request.signal });
+      const id = await store.saveImage(env, img.mime, img.base64);
+      return json({ image: { url: `/madar/api/img/${id}`, alt: prompt, credit: 'رسم توضيحي · Gemini / مدار', source: 'ai' }, remaining: credit.remaining });
+    } catch (e) {
+      const restored = await refundFailedRequest(env, credit, e);
+      console.warn('illustration failed', e?.code || e?.name || 'provider');
+      const message = e?.code === 'rate_limit' ? 'بلغ توليد الرسوم حد الاتصال المجاني مؤقتًا. جرّب لاحقًا؛ لم تُخصم نقطة الصورة.' : 'تعذّر توليد الرسم التوضيحي. أعد المحاولة؛ لم تُخصم نقطة الصورة.';
+      return fail(message, 502, restored);
+    }
+  }
   // The main generator is known to be out for now: only prepare the scene for the browser's free generators (no points).
   if (body.skipGen === true) {
     if (env.PROXY_LIMITER) {
@@ -440,7 +454,6 @@ async function routeImageGen(request, env, who) {
   // One English, text-free scene about this slide (image models cannot write real text).
   const { scene: drawn, keywords, subject } = await sceneFor(env, prompt, topic, slide);
   const scene = drawn || prompt;
-  console.log('image scene:', scene);
   try {
     if (c.imageEngine === 'nano-banana') {
       const aspect = ASPECTS.includes(body.aspect) ? body.aspect : '16:9';
@@ -454,7 +467,7 @@ async function routeImageGen(request, env, who) {
   } catch (e) {
     await credit.refund();
     await noteQuota(env, e);
-    console.error('image generation failed', e?.message || e);
+    console.error('image generation failed', e?.code || e?.name || 'provider');
     // The browser moves on to its free generators, then to a matching photo.
     return json({ image: null, fallback: true, retry: { scene, keywords: keywords || '' } });
   }
@@ -481,7 +494,8 @@ async function routeImageMatch(request, env, who) {
   const body = await readJSON(request);
   const query = str(body.query, 300).trim();
   if (!query) throw new HttpError('لا يوجد وصف للصورة.');
-  const photo = await matchStock(env, query, str(body.keywords, 100)).catch(() => null);
+  const exclude = (Array.isArray(body.exclude) ? body.exclude : []).filter(u => typeof u === 'string').slice(0, 30);
+  const photo = await matchStock(env, query, str(body.keywords, 100), exclude).catch(() => null);
   return json({ image: photo ? { ...photo, source: 'stock' } : null });
 }
 

@@ -6,6 +6,7 @@ import { openPlans } from './plans.js';
 import { brandLink, creditsPill } from './chrome.js';
 import { THEMES, customTheme } from './themes.js';
 import { getPref, setPref } from './store.js';
+import { imageSources } from './images.js';
 
 export function themeTile(theme, selected, onPick) {
   return h(
@@ -111,7 +112,7 @@ export function mountOutline(root) {
       h('label', { class: 'lbl' }, 'النوع', select(Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, v.label])), s.format, (v) => (s.format = v))),
       h('label', { class: 'lbl' }, 'اللغة', select(LANGUAGES, s.lang, (v) => (s.lang = v))),
       h('label', { class: 'lbl' }, 'كمية النص', select(DENSITY, s.density, (v) => (s.density = v))),
-      h('label', { class: 'lbl' }, 'الصور', select(config.demo ? {none:IMAGE_SOURCES.none} : config.aiImages ? IMAGE_SOURCES : { stock: IMAGE_SOURCES.stock, none: IMAGE_SOURCES.none }, req.imageSource, (v) => (req.imageSource = v))),
+      h('label', { class: 'lbl' }, 'الصور', select(imageSources(), req.imageSource, (v) => (req.imageSource = v))),
     ),
   );
   const themeGrid = h('div', { class: 'theme-grid' });
