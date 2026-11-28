@@ -118,7 +118,7 @@
   "app/order-delete-dialog.tsx": "e000213e526abe116032d92b05b59282325c77f27c4f515c764e2cb24e65f0af",
   "app/api/orders/permanent-delete/route.ts": "52754104dbea4d43b5ff7180877c7053025dbf489de3a507bf6ed651250678e1",
   "tests/order-deletion.test.mjs": "9d7eb016f13f7dee01e78b03f4305ca01634d4dabdfe102cbf4bdfa861f5bd65",
-  "application-source.tar": "7a5f30510104188f8c55544fe0ead4408a63590c38b93dc3a453437638cf134f",
+  "application-source.tar": "ddccd9428b9f8576b0eab5bea81666abaca13b4429a20e5c3c2a6fc9e27301f8",
   "app/api/payments/gumroad/delivery/route.ts": "52f553ec7e6afcd53c72e779a8900d3560d3aa738da841305d5e999317204fa4",
   "app/gumroad-delivery-status.tsx": "96f7236f31480599f95608f2f3f8099563fcd0dda692a0b273857e7a53785a8d",
   "server/gumroad-delivery.mjs": "d36331f8d7da64fd20230fd9b071d4e596df5720d812864435507d9b3e2b6702",
@@ -205,6 +205,6 @@
   "tests/madar-groq.test.mjs": "dee05f3ac7c665dc4021ffe60092a9e2dfe230e041f03ef776e2709695ee1a3c",
   "tests/madar-gemini.test.mjs": "7392cfc19d9135f0578ecfbfc4f762fb25f1653678c18a2bfae3a6977a026ac4",
   "tests/madar-gemini-client.test.mjs": "e3be89e16dca65cf0cd4d04934d0d0b22ea4f83e40adb8a5495d9edced0a9307",
-  "server/madar/src/illustrations.js": "ff0775bea11f40b50f68898965b9bdb5d4425d42b15688ee5f298cc84ea32395",
+  "server/madar/src/illustrations.js": "b47156772ec423c483df478956c2dfd78d4fd197d5031f86af6b58fba552d2fc",
   "tests/madar-images.test.mjs": "9c32fa9a9f3f9fb4dd61c327c5d80179f413536266c22e000ae023a1d380670c"
 }
