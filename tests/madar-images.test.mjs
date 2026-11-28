@@ -72,9 +72,10 @@ try {
   assert.equal((await request(imageRoute, { user: 'bob' })).status, 404);
   assert.equal((await request(imageRoute, { user: null })).status, 401);
   // A stale clock suggestion must never override an edited card about Tawhid.
-  const faith = {deckTitle:'أساس التوحيد',topic:'خطة درس',slide:{title:'إفراد الله بالعبادة',subtitle:'أساس التوحيد',body:'الإخلاص في العبادة',items:['الإخلاص','الدعاء']},prompt:'A generic clock on a desk',mode:'automatic'};
+  const faith = {deckTitle:'أساس التوحيد',topic:'An outdated lesson about office schedules',slide:{title:'إفراد الله بالعبادة',subtitle:'أساس التوحيد',body:'الإخلاص في العبادة',items:['الإخلاص','الدعاء']},prompt:'A generic clock on a desk',mode:'automatic'};
   const brief = illustrationBrief(faith);
   assert.ok(!JSON.stringify(brief).includes('clock'));
+  assert.ok(!JSON.stringify(brief).includes('office schedules'));
   assert.equal(brief.currentCard.title,'إفراد الله بالعبادة');
   assert.deepEqual(conceptLabels(faith).labels,['الإخلاص','الدعاء','أساس التوحيد']);
   const context = cardImageContext({title:'المجموعة الشمسية',topic:'الفضاء'}, {title:'الكواكب تدور حول الشمس',body:'مدارات الكواكب',items:[{title:'الشمس',text:'مركز النظام'}],image:{query:'An unrelated classroom'}});

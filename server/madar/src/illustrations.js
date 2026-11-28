@@ -59,7 +59,7 @@ export function illustrationSVG(scene, aspect = '16:9') {
 
 export function illustrationBrief({ prompt, topic, deckTitle, slide, mode }) {
   return {
-    currentPresentation: { title: String(deckTitle || '').slice(0, 240), topic: String(topic || '').slice(0, 600) },
+    currentPresentation: { title: String(deckTitle || (!slide?.title ? topic : '') || '').slice(0, 240) },
     currentCard: slide || null,
     ...(mode === 'custom' || !slide?.title ? { requestedVisualDetails: String(prompt || '').slice(0, 600) } : {}),
   };
