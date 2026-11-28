@@ -969,7 +969,7 @@ export function mountEditor(root, deckId) {
           if (JSON.stringify(context) !== JSON.stringify(cardImageContext(deck, c))) throw new Error('تغيّر محتوى البطاقة أثناء التوليد. أعد المحاولة حسب النص الحالي.');
           if (!r?.url) throw new Error('توليد الصور غير متاح الآن ولم نجد صورة مطابقة. حاول لاحقاً.');
           if (r.fallback) toast('توليد الصور غير متاح الآن، فاخترنا صورة فوتوغرافية مناسبة.', 'info');
-          set({ url: r.url, alt: r.alt, query: r.query || prompt.value.trim(), credit: r.credit, source: r.source, pos: img.pos === 'none' ? defaultImagePos('image_text', deck.format, 1) : img.pos });
+          set({ url: r.url, alt: r.alt, query: r.query || prompt.value.trim(), credit: r.credit, link: r.link || '', source: r.source, pos: img.pos === 'none' ? defaultImagePos('image_text', deck.format, 1) : img.pos });
         } catch (e) {
           toast(e.message, 'error');
           go.disabled = false;
