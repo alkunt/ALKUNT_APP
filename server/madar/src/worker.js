@@ -420,7 +420,8 @@ async function routeImageGen(request, env, who) {
   const c = cfg(env);
   const prompt = str(body.prompt, 600).trim();
   if (!prompt) throw new HttpError('اكتب وصف الصورة.');
-  const topic = str(body.topic, 400);
+  const topic = str(body.topic, 600);
+  const deckTitle = str(body.deckTitle, 240);
   const slide = cleanSlide(body.slide);
   if (!c.aiImages) {
     // No image generator: use a free photo only if it really shows the subject.
@@ -430,13 +431,13 @@ async function routeImageGen(request, env, who) {
   if (c.imageEngine === 'gemini-illustration') {
     const credit = await guard(request, env, who, { kind: 'image' });
     try {
-      const img = await generateIllustration(env, { prompt, topic, slide, aspect: body.aspect, style: body.style }, { signal: request.signal });
+      const img = await generateIllustration(env, { prompt, topic, deckTitle, slide, mode: body.mode === 'custom' ? 'custom' : 'automatic', aspect: body.aspect, style: body.style }, { signal: request.signal });
       const id = await store.saveImage(env, img.mime, img.base64);
-      return json({ image: { url: `/madar/api/img/${id}`, alt: prompt, credit: 'رسم توضيحي · Gemini / مدار', source: 'ai' }, remaining: credit.remaining });
+      return json({ image: { url: `/madar/api/img/${id}`, alt: img.alt, query: img.alt, credit: img.concept ? 'مخطط توضيحي · مدار' : 'رسم توضيحي · Gemini / مدار', source: 'ai' }, remaining: credit.remaining });
     } catch (e) {
       const restored = await refundFailedRequest(env, credit, e);
       console.warn('illustration failed', e?.code || e?.name || 'provider');
-      const message = e?.code === 'rate_limit' ? 'بلغ توليد الرسوم حد الاتصال المجاني مؤقتًا. جرّب لاحقًا؛ لم تُخصم نقطة الصورة.' : 'تعذّر توليد الرسم التوضيحي. أعد المحاولة؛ لم تُخصم نقطة الصورة.';
+      const message = e?.code === 'rate_limit' ? 'بلغ توليد الرسوم حد الاتصال المجاني مؤقتًا. جرّب لاحقًا؛ لم تُخصم نقطة الصورة.' : e?.code === 'image_relevance' ? 'لم ينتج رسم واضح الصلة بمحتوى البطاقة. وضّح الفكرة وأعد المحاولة؛ بقيت صورتك السابقة ولم تُخصم نقطة الصورة.' : 'تعذّر توليد الرسم التوضيحي. أعد المحاولة؛ لم تُخصم نقطة الصورة.';
       return fail(message, 502, restored);
     }
   }
@@ -475,13 +476,13 @@ async function routeImageGen(request, env, who) {
 
 function cleanSlide(s) {
   if (!s || typeof s !== 'object') return null;
-  const title = str(s.title, 200).trim();
+  const title = str(s.title, 240).trim();
   if (!title) return null;
   return {
     title,
-    subtitle: str(s.subtitle, 200),
-    body: str(s.body, 500),
-    items: (Array.isArray(s.items) ? s.items : []).slice(0, 6).map((t) => str(t, 100)),
+    subtitle: str(s.subtitle, 300),
+    body: str(s.body, 1200),
+    items: (Array.isArray(s.items) ? s.items : []).slice(0, 6).map((t) => str(t, 240)),
   };
 }
 

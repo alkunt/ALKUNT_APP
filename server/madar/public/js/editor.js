@@ -8,6 +8,7 @@ import { renderCard, scaled, fitCard, htmlToMd, isFixed, deckDir } from './rende
 import { THEMES, FONT_CHOICES, customTheme, getTheme } from './themes.js';
 import { themeTile } from './outline.js';
 import { fillImages, searchImages, aiImage, uploadImage, imageSources, imageStyles } from './images.js';
+import { cardImageContext } from './image-context.js';
 import { startPresent } from './present.js';
 import { openShare } from './share.js';
 import { exportPDF, exportPPTX, exportPNG, exportJSON } from './export.js';
@@ -953,25 +954,29 @@ export function mountEditor(root, deckId) {
 
     // AI
     if (config.aiImages) {
-      const prompt = h('textarea', { class: 'field', rows: 2, style: { minHeight: '64px' }, value: img.query || c.title || '', placeholder: 'صِف الصورة التي تريدها' });
+      const initialPrompt = c.title || deck.title || '';
+      const prompt = h('textarea', { class: 'field', rows: 2, style: { minHeight: '64px' }, value: initialPrompt, placeholder: 'صِف الصورة التي تريدها' });
       let style = Object.hasOwn(imageStyles(), deck.settings.imageStyle) ? deck.settings.imageStyle : config.imageEngine === 'gemini-illustration' ? 'flat' : 'photo';
-      const go = button(`ولّد صورة${costLabel('image')}`, { kind: 'primary', size: 'sm', icon: 'wand-sparkles', onClick: async () => {
+      const imageAction = img.url ? 'أعد التوليد حسب البطاقة' : 'ولّد صورة';
+      const go = button(`${imageAction}${costLabel('image')}`, { kind: 'primary', size: 'sm', icon: 'wand-sparkles', onClick: async () => {
         if (!prompt.value.trim()) return;
         go.disabled = true;
         go.lastChild.textContent = 'جارٍ التوليد…';
         try {
           const targetPos = img.pos === 'none' ? defaultImagePos('image_text', deck.format, 1) : img.pos;
-          const r = await aiImage(prompt.value.trim(), style, imageAspect(deck.format, targetPos), deck.topic || deck.title);
+          const context = cardImageContext(deck, c);
+          const r = await aiImage(prompt.value.trim(), style, imageAspect(deck.format, targetPos), { ...context, mode: prompt.value.trim() === initialPrompt ? 'automatic' : 'custom' });
+          if (JSON.stringify(context) !== JSON.stringify(cardImageContext(deck, c))) throw new Error('تغيّر محتوى البطاقة أثناء التوليد. أعد المحاولة حسب النص الحالي.');
           if (!r?.url) throw new Error('توليد الصور غير متاح الآن ولم نجد صورة مطابقة. حاول لاحقاً.');
           if (r.fallback) toast('توليد الصور غير متاح الآن، فاخترنا صورة فوتوغرافية مناسبة.', 'info');
-          set({ url: r.url, alt: r.alt, credit: r.credit, source: r.source, pos: img.pos === 'none' ? defaultImagePos('image_text', deck.format, 1) : img.pos });
+          set({ url: r.url, alt: r.alt, query: r.query || prompt.value.trim(), credit: r.credit, source: r.source, pos: img.pos === 'none' ? defaultImagePos('image_text', deck.format, 1) : img.pos });
         } catch (e) {
           toast(e.message, 'error');
           go.disabled = false;
-          go.lastChild.textContent = 'ولّد صورة';
+          go.lastChild.textContent = imageAction + costLabel('image');
         }
       } });
-      body.append(h('div', { class: 'panel', style: { padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' } }, h('h3', {}, icon('wand-sparkles', 18), config.imageEngine === 'gemini-illustration' ? 'رسوم توضيحية بالذكاء الاصطناعي' : config.imageEngine === 'nano-banana' ? 'توليد بـ Nano Banana' : 'توليد بالذكاء الاصطناعي'), config.imageEngine === 'gemini-illustration' ? h('p', { class: 'tiny' }, 'رسم توضيحي خاص بموضوعك ضمن الاتصال المجاني. للصور الواقعية اختر الصور الفوتوغرافية المجانية.') : null, prompt, select(imageStyles(), style, (v) => (style = v)), go));
+      body.append(h('div', { class: 'panel', style: { padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' } }, h('h3', {}, icon('wand-sparkles', 18), config.imageEngine === 'gemini-illustration' ? 'رسوم توضيحية بالذكاء الاصطناعي' : config.imageEngine === 'nano-banana' ? 'توليد بـ Nano Banana' : 'توليد بالذكاء الاصطناعي'), h('p', { class: 'tiny' }, 'تعتمد الصورة على عنوان هذه البطاقة ونصها الحالي. يمكنك تخصيص الوصف، وتبقى الصورة السابقة حتى ينجح التوليد.'), prompt, select(imageStyles(), style, (v) => (style = v)), go));
     }
     // upload
     const file = h('input', { type: 'file', accept: 'image/*', hidden: true, onChange: async (e) => {
