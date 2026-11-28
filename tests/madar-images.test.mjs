@@ -55,7 +55,10 @@ try {
   const stock = await (await request('/api/image-match', { method: 'POST', body: { query: 'plant garden' } })).json();
   assert.equal(stock.image.source, 'stock'); assert.equal(await status(), stockBefore);
   // Only allowlisted geometry enters the renderer, even if the model is hostile.
-  const svg = illustrationSVG({ ...scene, shapes: [...scene.shapes, { kind: 'script', d: 'alert(1)' }, shape('path', { d: 'M 0 0\"/><image href=\"https://evil.example/' }), shape('rect', { fill: 'url(https://evil.example)', x: Infinity })] });
+  assert.throws(()=>illustrationSVG({ ...scene, shapes: [...scene.shapes, { kind: 'script', d: 'alert(1)' }] }),/geometry/);
+  assert.throws(()=>illustrationSVG({ ...scene, shapes: [...scene.shapes, shape('path', { d: 'M 0 0\"/><image href=\"https://evil.example/' })] }),/geometry/);
+  const svg = illustrationSVG({ ...scene, shapes: [...scene.shapes, shape('path',{d:'M 500 500 V 200 H 510 S 520 210 520 220 T 525 230 Z'}), shape('rect', { fill: 'url(https://evil.example)', x: Infinity })] });
+  assert.ok(svg.includes('V 200 H 510'),'Valid horizontal/vertical paths must not disappear from the rendered picture.');
   assert.ok(!/script|href|evil\.example|Infinity/.test(svg));
   const bytes = await sharp(Buffer.from(svg)).png().toBuffer();
   const metadata = await sharp(bytes).metadata();
