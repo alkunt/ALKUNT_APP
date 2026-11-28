@@ -118,7 +118,7 @@
   "app/order-delete-dialog.tsx": "e000213e526abe116032d92b05b59282325c77f27c4f515c764e2cb24e65f0af",
   "app/api/orders/permanent-delete/route.ts": "52754104dbea4d43b5ff7180877c7053025dbf489de3a507bf6ed651250678e1",
   "tests/order-deletion.test.mjs": "9d7eb016f13f7dee01e78b03f4305ca01634d4dabdfe102cbf4bdfa861f5bd65",
-  "application-source.tar": "9c32bb2bebaf0dbef51a629a44638e8e6dd60f15a99fc6b7f03a5846652f4c34",
+  "application-source.tar": "e0af8ae9ba9370eebd4ecd83beb506d7fc338018616a87690a49371a8226f084",
   "app/api/payments/gumroad/delivery/route.ts": "52f553ec7e6afcd53c72e779a8900d3560d3aa738da841305d5e999317204fa4",
   "app/gumroad-delivery-status.tsx": "96f7236f31480599f95608f2f3f8099563fcd0dda692a0b273857e7a53785a8d",
   "server/gumroad-delivery.mjs": "d36331f8d7da64fd20230fd9b071d4e596df5720d812864435507d9b3e2b6702",
@@ -194,7 +194,7 @@
   "server/madar/src/plans.js": "efc6df46e787600c065f42665fb6c09bbab0154d95ce74a94cc9e5a67a6c95ef",
   "server/madar/src/sources.js": "c7fe2ad1cdea1e92f658b96b360ab749a585bbf34e87fdf5d181fd864cc70d63",
   "server/madar/src/store.js": "30a726489c0669fa936b5dc07d17064bb9a161c8cf80e7b4bf275fc2871070f0",
-  "server/madar/src/worker.js": "21140a81cddfc6839555753b5649dfc717427f4615f4b1c562547c5d5fb79908",
+  "server/madar/src/worker.js": "615926fc24445d1c56952c9656b2112e277305827fe4a1fb23a83135ae201a35",
   "tests/madar-ai.test.mjs": "9484f2b041ea6d8c532e9a973edad614d97a6ef1807b8774a826df34551735ea",
   "server/madar/provider-settings.mjs": "e1c8bb8f755b08b0e40564c170f5e665b73fc4a051f76277b83f71cbb0ce66c4",
   "server/madar/public/js/provider-settings.js": "373f6fc16b1f52362c785008db6b87035fd87f9993ac124d47439428a2b86350",
@@ -205,7 +205,7 @@
   "tests/madar-groq.test.mjs": "dee05f3ac7c665dc4021ffe60092a9e2dfe230e041f03ef776e2709695ee1a3c",
   "tests/madar-gemini.test.mjs": "7392cfc19d9135f0578ecfbfc4f762fb25f1653678c18a2bfae3a6977a026ac4",
   "tests/madar-gemini-client.test.mjs": "e3be89e16dca65cf0cd4d04934d0d0b22ea4f83e40adb8a5495d9edced0a9307",
-  "server/madar/src/illustrations.js": "b1eaa4c8550bb5553c01ce88398c6cee6e13708f505f6313d1392a6bccaba655",
-  "tests/madar-images.test.mjs": "b0a9eeb500054ac456dc5c30d615e18d06709a17629db43efac916b53e04d6e0",
+  "server/madar/src/illustrations.js": "3e15c509d4a6ce3bbbd9c54e159199031f2b8a283b72c9c781ed6f836ddccd76",
+  "tests/madar-images.test.mjs": "db9b74e7eafba03f6981f835595e16e6d3568251dd7416660d7b81da927584c8",
   "server/madar/public/js/image-context.js": "ef138bbf9400a392dee3e6ff479b63240b3b83dd7d5f22c76a4302f5eca8e768"
 }

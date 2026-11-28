@@ -447,13 +447,13 @@ async function routeImageGen(request, env, who) {
       const { success } = await env.PROXY_LIMITER.limit({ key: `scene:${who.ip}` });
       if (!success) throw new HttpError('طلبات كثيرة. انتظر دقيقة.', 429);
     }
-    const planned = await sceneFor(env, prompt, topic, slide);
+    const planned = await sceneFor(env, prompt, deckTitle || topic, slide);
     return json({ image: null, fallback: true, retry: { scene: planned.scene || prompt, keywords: planned.keywords || '' } });
   }
   const credit = await guard(request, env, who, { kind: 'image' });
   const style = pick(body.style, IMAGE_STYLES, 'photo');
   // One English, text-free scene about this slide (image models cannot write real text).
-  const { scene: drawn, keywords, subject } = await sceneFor(env, prompt, topic, slide);
+  const { scene: drawn, keywords, subject } = await sceneFor(env, prompt, deckTitle || topic, slide);
   const scene = drawn || prompt;
   try {
     if (c.imageEngine === 'nano-banana') {

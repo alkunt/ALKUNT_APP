@@ -72,16 +72,18 @@ try {
   assert.equal((await request(imageRoute, { user: 'bob' })).status, 404);
   assert.equal((await request(imageRoute, { user: null })).status, 401);
   // A stale clock suggestion must never override an edited card about Tawhid.
-  const faith = {deckTitle:'أساس التوحيد',topic:'خطة درس',slide:{title:'إفراد الله بالعبادة',subtitle:'أساس التوحيد',body:'الإخلاص في العبادة',items:['الإخلاص','الدعاء']},prompt:'A generic clock on a desk',mode:'automatic'};
+  const faith = {deckTitle:'أساس التوحيد',topic:'An outdated lesson about office schedules',slide:{title:'إفراد الله بالعبادة',subtitle:'أساس التوحيد',body:'الإخلاص في العبادة',items:['الإخلاص','الدعاء']},prompt:'A generic clock on a desk',mode:'automatic'};
   const brief = illustrationBrief(faith);
   assert.ok(!JSON.stringify(brief).includes('clock'));
+  assert.ok(!JSON.stringify(brief).includes('office schedules'));
   assert.equal(brief.currentCard.title,'إفراد الله بالعبادة');
   assert.deepEqual(conceptLabels(faith).labels,['الإخلاص','الدعاء','أساس التوحيد']);
   const context = cardImageContext({title:'المجموعة الشمسية',topic:'الفضاء'}, {title:'الكواكب تدور حول الشمس',body:'مدارات الكواكب',items:[{title:'الشمس',text:'مركز النظام'}],image:{query:'An unrelated classroom'}});
   assert.equal(context.slide.body,'مدارات الكواكب'); assert.ok(!JSON.stringify(context).includes('classroom'));
+  const beforeFaithCalls=googleCalls;
   const grounded = await (await request('/api/image-gen',{method:'POST',body:{...faith,aspect:'3:4'}})).json();
   assert.equal(grounded.image.alt,faith.slide.title); assert.ok(grounded.image.credit.includes('مخطط'));
-  const lastReview = googleRequests.at(-1); assert.equal(JSON.parse(lastReview.contents[0].parts[0].text).currentCard.title,faith.slide.title);
+  assert.equal(googleCalls,beforeFaithCalls,'An exact-source diagram does not need a model to invent or approve a new subject.');
   const typography = await conceptPNG(faith,'16:9'); assert.equal((await sharp(typography).metadata()).width,1280);
   mode='off-topic'; const unrelatedBalance=await status(), imagesBefore=sql.prepare('SELECT COUNT(*) AS n FROM madar_images').get().n, callsBefore=googleCalls;
   const rejected=await request('/api/image-gen',{method:'POST',body:{...context,prompt:'old visual',mode:'automatic'}});
