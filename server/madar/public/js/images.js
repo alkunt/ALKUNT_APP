@@ -2,6 +2,7 @@
 import { postJSON, request, config, ApiError, canAfford, deviceHeaders } from './api.js';
 import { LIMITS, imageAspect, defaultImagePos, IMAGE_SOURCES, IMAGE_STYLES } from './schema.js';
 import { toast } from './ui.js';
+import { cardImageContext } from './image-context.js';
 
 export const imageSources = () => config.demo ? { none: IMAGE_SOURCES.none } : config.aiImages ? { ...IMAGE_SOURCES, ...(config.imageEngine === 'gemini-illustration' ? { ai: 'رسوم توضيحية بالذكاء الاصطناعي · مجانية' } : {}) } : { stock: IMAGE_SOURCES.stock, none: IMAGE_SOURCES.none };
 export const imageStyles = () => config.imageEngine === 'gemini-illustration' ? { flat: 'رسم توضيحي ملون', lineart: 'رسم بخطوط بسيطة' } : IMAGE_STYLES;
@@ -25,9 +26,9 @@ const nextReset = () => {
 async function backupImage() { return null; }
 
 // `slide` ties the picture to that slide's title and text. Returns null when nothing matching is available.
-export async function aiImage(prompt, style, aspect = '16:9', topic = '', slide = null) {
+export async function aiImage(prompt, style, aspect = '16:9', context = {}) {
   const skipGen = Date.now() < mainOutUntil;
-  const { image, fallback, retry } = await postJSON('/madar/api/image-gen', { prompt, style, aspect, topic, slide, skipGen });
+  const { image, fallback, retry } = await postJSON('/madar/api/image-gen', { prompt, style, aspect, ...context, skipGen });
   if (!image && retry) return backupImage(retry, prompt, style, aspect);
   if (!image) return null;
   if (image?.data) {
@@ -96,18 +97,14 @@ export async function fillImages(deck, onCard, { only, retryMissing = false } = 
     onCard(i);
   }
 
-  const slideOf = (c) => ({
-    title: c.title || '',
-    subtitle: c.subtitle || '',
-    body: c.body || '',
-    items: (c.items || []).map((it) => [it.title, it.text].filter(Boolean).join(': ')),
-  });
   const find = async (q, c) => {
     if (source === 'ai' && config.aiImages && canAfford('image')) {
-      const img = await aiImage(q, deck.settings?.imageStyle, imageAspect(deck.format, c.image.pos), deck.topic || deck.title, slideOf(c));
+      const context = cardImageContext(deck, c);
+      const img = await aiImage(q, deck.settings?.imageStyle, imageAspect(deck.format, c.image.pos), { ...context, mode: 'automatic' });
+      if (JSON.stringify(context) !== JSON.stringify(cardImageContext(deck, c))) throw new ApiError('تغيّر محتوى البطاقة أثناء التوليد. أعد توليد الصورة حسب النص الحالي.', 409);
       return img?.source === 'stock' && used.has(img.url) ? null : img; // never the same photo on two slides
     }
-    const { image } = await postJSON('/madar/api/image-match', { query: q, exclude: [...used] });
+    const { image } = await postJSON('/madar/api/image-match', { query: q, ...cardImageContext(deck, c), exclude: [...used] });
     return image && !used.has(image.url) ? image : null;
   };
   let missing = 0;
@@ -125,7 +122,7 @@ export async function fillImages(deck, onCard, { only, retryMissing = false } = 
       }
       if (img?.url) {
         used.add(img.url);
-        Object.assign(c.image, { url: img.url, alt: img.alt || q, credit: img.credit || '', link: img.link || '', source: img.source || source });
+        Object.assign(c.image, { url: img.url, alt: img.alt || q, query: img.query || q, credit: img.credit || '', link: img.link || '', source: img.source || source });
       } else {
         // Nothing that shows this subject: a clean text slide beats an unrelated picture.
         if (source === 'ai') Object.assign(c.image, { retryPos: c.image.pos, retryAt: nextReset() });
@@ -140,7 +137,7 @@ export async function fillImages(deck, onCard, { only, retryMissing = false } = 
     }
   };
 
-  // AI images one at a time (they are slower and rate limited); photos three at a time.
+  // Keep generation and matching sequential within a batch.
   // Reserve each selected URL before the next photo search so two cards cannot
   // race to choose the same first result.
   const width = 1;
